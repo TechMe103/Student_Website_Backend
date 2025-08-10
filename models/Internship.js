@@ -2,7 +2,8 @@ const mongoose = require("mongoose");
 
 const internshipSchema = new mongoose.Schema({
     stuID : {
-        type : String , 
+        type : mongoose.Schema.Types.ObjectId , 
+        ref : "Student" , 
         required : true
     } , 
 

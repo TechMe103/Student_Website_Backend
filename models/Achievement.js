@@ -2,7 +2,8 @@ const mongoose = require("mongoose");
 
 const achievementSchema = new mongoose.Schema({
     stuID: {
-        type : String , 
+        type : mongoose.Schema.Types.ObjectId , 
+        ref : "Student" , 
         required : true 
     } , 
 
@@ -11,7 +12,7 @@ const achievementSchema = new mongoose.Schema({
     date : Date , 
     certificateURL : String , 
 } , 
-{timestamps : true});
+{timestamps : true});          //create two fields createdAt & updatedAt
 
 
 module.exports = mongoose.model("Achievemet" , achievementSchema);

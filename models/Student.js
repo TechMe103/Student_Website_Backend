@@ -1,24 +1,22 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
 const studentSchema = new mongoose.Schema({
-    stuID : {
-        type : String , 
-        required : true , 
-        unique : true
-    } , 
 
-    name : String , 
-    rollno : String , 
-    year : String , 
-    div : String , 
-    branch : String ,
-    dob : Date , 
-    bloodGroup :String , 
-    fees : Number , 
-    caste : String , 
-    email : String , 
-    password : String , 
-} , 
-{timestamps : true});
+    name: { type: String, required: true },
+    roll: String,
+    year: String,
+    div: String,
+    branch: String,
+    dob: Date,
+    bloodGroup: String,
+    address: String,
+    fees: Number,
+    caste: String,
+    email: { type: String, unique: true },
+    password: String 
 
-module.exports = mongoose.model("student" , studentSchema);
+}, 
+{ timestamps: true });
+
+
+module.exports = mongoose.model('Student', studentSchema);
