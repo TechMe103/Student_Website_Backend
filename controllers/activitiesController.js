@@ -10,7 +10,7 @@ const createActivity = async(req , res) => {
     }
 };
 
-const getAchievementByStu = async(req, res ) => {
+const getActivityByStu = async(req, res ) => {
     try{
         const activities = await Activity.find({ stuID : req.params.stuID }).populate("stuID" , "name roll branch");
         res.json(activities);

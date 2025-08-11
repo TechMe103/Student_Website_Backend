@@ -1,7 +1,7 @@
 const express = require("express");
-const router = require.Router();
+const router = express.Router();
 
-const { addSemInfo , getSemInfoByStu , updateSemInfo } = require("../controllers/semInfoContro");
+const { addSemInfo , getSemInfoByStu , updateSemInfo } = require("../controllers/semInfoController");
 
 router.post("/" , addSemInfo);
 router.get("/:stuID" , getSemInfoByStu);

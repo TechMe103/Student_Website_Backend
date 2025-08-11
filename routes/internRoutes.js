@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { createInternship , getInternshipByStu , updateInternship , deleteInternship } = require("../controllers/internContro");
+const { createInternship , getInternshipByStu , updateInternship , deleteInternship } = require("../controllers/internController");
 
 
 //route => internship

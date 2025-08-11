@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { createActivity , getActivityByStu , updateActivity , deleteActivity } = require("../controllers/activitiesContro");
+const { createActivity , getActivityByStu , updateActivity , deleteActivity } = require("../controllers/activitiesController");
 
 router.post("/" , createActivity);
 router.get("/:stuID" , getActivityByStu);

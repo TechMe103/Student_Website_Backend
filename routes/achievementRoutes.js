@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { createAchievement , getAchievementByStu , updateAchievement , deleteAchievement } = require("../controllers/achievementContro");
+const { createAchievement , getAchievementByStu , updateAchievement , deleteAchievement } = require("../controllers/achievementController");
 
 router.post("/" , createAchievement);
 router.get("/:stuID" , getAchievementByStu);
