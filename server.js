@@ -17,7 +17,7 @@ app.use(cookieParser());
 
 
 // Routes
-app.use("/students", require('./routes/studentRoutes'));
+app.use("/students", require('./routes/stuRoute'));
 app.use("/internships" , require("./routes/internRoutes"));
 app.use("/achievements", require("./routes/achievementRoutes"));
 app.use("/activities", require("./routes/activitiesRoutes"));
