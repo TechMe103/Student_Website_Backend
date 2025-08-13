@@ -13,15 +13,16 @@ connectDB()
 // Middlewares
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({extended: true}));
 app.use(cookieParser());
 
 
 // Routes
-app.use("/students", require('./routes/stuRoute'));
-app.use("/internships" , require("./routes/internRoutes"));
-app.use("/achievements", require("./routes/achievementRoutes"));
-app.use("/activities", require("./routes/activitiesRoutes"));
-app.use("/semesterInfo", require("./routes/semInfoRoutes"));
+app.use("/api/students", require('./routes/stuRoute'));
+app.use("/api/internships" , require("./routes/internRoutes"));
+app.use("/api/achievements", require("./routes/achievementRoutes"));
+app.use("/api/activities", require("./routes/activitiesRoutes"));
+app.use("/api/semesterInfo", require("./routes/semInfoRoutes"));
 
 
 app.get("/" , (req, res) => {
