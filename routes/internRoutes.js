@@ -5,7 +5,7 @@ const { createInternship , getInternshipByStu , updateInternship , deleteInterns
 
 
 //route => internship
-router.get("/" , createInternship);
+router.post("/" , createInternship);
 
 //get internship => student
 router.get("/:stuID" , getInternshipByStu);
