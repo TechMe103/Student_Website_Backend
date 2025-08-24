@@ -7,10 +7,35 @@ const achievementSchema = new mongoose.Schema({
         required : true 
     } , 
 
-    title : String , 
-    description : String , 
-    date : Date , 
-    certificateURL : String , 
+    category:{
+        type : String ,
+        enum : ["Coding competitions" , "Sports" , "Hackathons" , "Cultural" , "Technical"] , 
+        required: true 
+    } , 
+
+    title : {type : String , required : true} , 
+    description : {type : String , required : true} ,
+
+    issuedBy : {type : String , required : true} , 
+    date : {
+        from : { type : Date , required : true } , 
+        to : { type : Date , required : true } 
+    } , 
+
+    achievementType : {
+        type : String , 
+        enum : ["Participation" , "Winner" , "Runner-up"] ,
+        required : true
+    } , 
+
+    teamMembers : [{type : String}] , //list of team members
+
+    photographs : {
+        eventPhoto : { type : String , required : true } ,
+        certificateURL : {type : String , required : true} 
+
+    },
+
 } , 
 {timestamps : true});          //create two fields createdAt & updatedAt
 
