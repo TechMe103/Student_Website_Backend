@@ -8,6 +8,7 @@ const studentSchema = new mongoose.Schema({
         lastName : { type : String , required : true } ,
     },
 
+    
     rollno: String,
     year: String,
     div: String,
