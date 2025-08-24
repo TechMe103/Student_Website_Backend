@@ -33,6 +33,7 @@ const admissionSchema = new mongoose.Schema({
     } 
 });
 
+
 admissionSchema.statics.getUnpaidStudents = function (){
     return this.find({ isFeesPaid: false }).populate("studentId");
 };
