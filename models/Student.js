@@ -9,7 +9,7 @@ const studentSchema = new mongoose.Schema({
 
     },
 
-    roll: String,
+    rollno: String,
     year: String,
     div: String,
     branch: String,
