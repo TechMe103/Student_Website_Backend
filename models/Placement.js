@@ -17,6 +17,19 @@ const placementSchema = new mongoose.Schema({
         required: true,
     },
 
+    higherStudies:{
+        examName:{
+            type: String,
+            required: true,
+            enum: ["GATE", "CAT", "GRE", "TOFEL", "IELTS" , "UPSC"],
+        },
+        score:{
+            type: Number,
+            required: true,
+        },
+        //marksheet as proof (pdf / jpeg -- which format? ) -- also how to implement these?
+    }
+
     // LOI/joining letter/offer letter --yet to decide how to implement these
 
     
