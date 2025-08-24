@@ -13,6 +13,7 @@ router.get("/:stuID" , getInternshipByStu);
 //update internship
 router.put("/:id" , updateInternship);
 
+
 //del internship
 router.delete("/:id" , deleteInternship);
 
