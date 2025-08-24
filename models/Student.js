@@ -41,7 +41,7 @@ const studentSchema = new mongoose.Schema({
     } , 
 
     enrollmentNo: { type: String, required: true , unique: true} , 
-    studentId: { type: String, required: true , unique: true} ,
+    stuID: { type: String, required: true , unique: true} ,
 
 }, 
 { timestamps: true });
