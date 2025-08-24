@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const admissionSchema = new mongoose.Schema({
 
-    studentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
+    stuID: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
     rollno: String,
     year: String,     // fy/sy/ty
     div: String,
@@ -35,7 +35,7 @@ const admissionSchema = new mongoose.Schema({
 
 
 admissionSchema.statics.getUnpaidStudents = function (){
-    return this.find({ isFeesPaid: false }).populate("studentId");
+    return this.find({ isFeesPaid: false }).populate("stuID");
 };
 
 module.exports = mongoose.model("Admission", admissionSchema);
