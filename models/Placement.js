@@ -7,28 +7,58 @@ const placementSchema = new mongoose.Schema({
         required : true
     } , 
 
-    companyName : {type: String, required: true}, 
+    
+    
 
-    role : {type: String, required: true}, 
-
-    placementType:{
-        type: String,
-        enum: ["Campus", "Off-Campus"],
-        required: true,
+    // Placement info (only required if isPlacement = true)
+    placementInfo: {
+        isPlacement: {
+            type: Boolean,
+            required: true
+        },
+        companyName: {
+            type: String,
+            required: function () {
+                return this.placementInfo?.isPlacement === true;
+            }
+        },
+        role: {
+            type: String,
+            required: function () {
+                return this.placementInfo?.isPlacement === true;
+            }
+        },
+        placementType: {
+            type: String,
+            enum: ["Campus", "Off-Campus"],
+            required: function () {
+                return this.placementInfo?.isPlacement === true;
+            }
+        }
     },
 
-    higherStudies:{
-        examName:{
+    // Higher Studies info (only required if isPlacement = false)
+    higherStudies: {
+        isHigherStudies: {
+            type: Boolean,
+            required: true
+        },
+        examName: {
             type: String,
-            required: true,
-            enum: ["GATE", "CAT", "GRE", "TOFEL", "IELTS" , "UPSC"],
+            enum: ["GATE", "CAT", "GRE", "TOFEL", "IELTS", "UPSC"],
+            required: function () {
+                return this.higherStudies?.isHigherStudies === true;
+            }
         },
-        score:{
+        score: {
             type: Number,
-            required: true,
-        },
+            required: function () {
+                return this.higherStudies?.isHigherStudies === true;
+            }
+        }
         //marksheet as proof (pdf / jpeg -- which format? ) -- also how to implement these?
-    }
+    },
+
 
     // LOI/joining letter/offer letter --yet to decide how to implement these
 

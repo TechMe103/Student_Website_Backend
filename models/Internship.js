@@ -27,10 +27,11 @@ const internshipSchema = new mongoose.Schema({
         stipend: { 
             type: Number,
             required: function() {
-                return this.payment.isPaid === true;  // stipend is required if isPaid = true
+                return this.stipendInfo?.isPaid === true;  // stipend is required if isPaid = true
             }
         }
     },
+
 
     description : {type: String, required: true}, 
 
