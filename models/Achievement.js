@@ -9,7 +9,7 @@ const achievementSchema = new mongoose.Schema({
 
     category:{
         type : String ,
-        enum : ["Coding competitions" , "Sports" , "Hackathons" , "Cultural" , "Technical"] , 
+        enum : ["Coding competitions" , "Committee", "Hackathons", "Sports"  , "Cultural" , "Technical"] , 
         required: true 
     } , 
 
