@@ -40,4 +40,4 @@ const achievementSchema = new mongoose.Schema({
 {timestamps : true});          //create two fields createdAt & updatedAt
 
 
-module.exports = mongoose.model("Achievemet" , achievementSchema);
+module.exports = mongoose.model("Achievement" , achievementSchema);
