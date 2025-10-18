@@ -67,7 +67,7 @@ exports.signup = async (req, res) => {
 
         // Create JWT
         const token = jwt.sign(
-        { id: student._id, studentID: student.studentID, role: 'student' },
+        { id: student._id, role: 'student' },
         JWT_SECRET,
         { expiresIn: '1d' }
         );
@@ -114,7 +114,7 @@ exports.login = async (req, res) => {
         if (!match) return res.status(400).json({ error: 'Invalid credentials' });
 
         const token = jwt.sign(
-        { id: student._id, studentID: student.studentID, role: 'student' },
+        { id: student._id, role: 'student' },
         JWT_SECRET,
         { expiresIn: '1d' }
         );
