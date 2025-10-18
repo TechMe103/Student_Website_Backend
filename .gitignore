@@ -4,6 +4,9 @@ node_modules/
 # Environment variables
 .env
 
+# Admin Script
+adminScript.js
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

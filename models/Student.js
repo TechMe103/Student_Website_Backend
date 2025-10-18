@@ -8,38 +8,18 @@ const studentSchema = new mongoose.Schema({
         lastName : { type : String , required : true } ,
     },
 
-    
-    
-    branch: String,
-    dob: Date,
-    bloodGroup: String,
+    PRN: { type: String, required: true , unique: true} , 
+    studentID: { type: String, required: true , unique: true} ,
 
-    currentAddress: {
-        street : String , 
-        city : { type : String , required : true } , 
-        pincode : String 
-    },
-
-    nativeAddress: {
-        street : String , 
-        city : { type : String , required : true } , 
-        pincode : String 
-    },
-
-    category: String,
     email: { type: String, unique: true , required: true },
-    password: String, 
+    password: { type: String,  required: true },
 
-    mobileNo : { type: String, required: true } , 
-    parentMobileNo : { type: String, required: true } ,
-    
-    studentPhoto : {
-        type: String,
-        required: true ,
-    } , 
+    //uncomment this field when cloudinary is implemented in the project
 
-    enrollmentNo: { type: String, required: true , unique: true} , 
-    stuID: { type: String, required: true , unique: true} ,
+    // studentPhoto : {
+    //     type: String,
+    //     required: true ,
+    // } , 
 
 }, 
 { timestamps: true });
