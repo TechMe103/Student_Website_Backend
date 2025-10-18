@@ -5,6 +5,8 @@ const Student = require("../models/Student.js")
 const Admin = require('../models/Admin.js');
 const { signupSchema, loginSchema } = require('../validators/authValidation.js');
 
+const {uploadToCloudinary}=require("../helpers/UploadToCloudinary.js");
+
 require("dotenv").config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "secret_key";
@@ -45,16 +47,22 @@ exports.signup = async (req, res) => {
         const existingPRN = await Student.findOne({ PRN });
         if (existingPRN) return res.status(400).json({ success: false, message: 'PRN already exists' });
 
+        let photoUrl = null;
+            if (req.file) {
+            photoUrl = await uploadToCloudinary(req.file.path);
+        }
+
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
         // Create Student
         const student = await Student.create({
-        name: { firstName, middleName, lastName },
-        studentID: studentID,
-        PRN,
-        email,
-        password: hashedPassword,
+            name: { firstName, middleName, lastName },
+            studentID: studentID,
+            PRN,
+            email,
+            password: hashedPassword,
+            studentPhoto : photoUrl,
         });
 
         // Create JWT

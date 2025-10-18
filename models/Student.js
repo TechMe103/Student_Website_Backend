@@ -14,12 +14,12 @@ const studentSchema = new mongoose.Schema({
     email: { type: String, unique: true , required: true },
     password: { type: String,  required: true },
 
-    //uncomment this field when cloudinary is implemented in the project
+    //uncomment required:true field when cloudinary is implemented in the project
 
-    // studentPhoto : {
-    //     type: String,
-    //     required: true ,
-    // } , 
+    studentPhoto : {
+        type: String,
+        // required: true ,
+    } , 
 
 }, 
 { timestamps: true });
