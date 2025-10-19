@@ -1,14 +1,11 @@
 const Internship = require("../models/Internship");
 const Student = require("../models/Student");
-const  uploadToCloudinary=require("../helpers/UploadToCloudinary");
+const  {uploadToCloudinary}=require("../helpers/UploadToCloudinary");
 
 
 const createInternship = async (req, res) => {
     try {
         const { id } = req.user;
-
-        console.log(id);
-        console.log(req.body);
 
         // Optional: check if student exists
         const student = await Student.findById(id);
@@ -27,10 +24,16 @@ const createInternship = async (req, res) => {
         const stipendInfo = { isPaid };
         if (isPaid) stipendInfo.stipend = stipend; // only add stipend if isPaid is true
 
-        let photoProofUrl = null;
-            if (req.file) {
-            photoProofUrl = await uploadToCloudinary(req.file.path);
-        }
+        const internshipReport = req.files?.internshipReport?.[0];
+        const photoProof = req.files?.photoProof?.[0];
+
+        console.log("Report File:", internshipReport);
+        console.log("Photo Proof:", photoProof);
+
+        // You can now upload both files to Cloudinary:
+        const reportUrl = await uploadToCloudinary(internshipReport.path);
+        const proofUrl = await uploadToCloudinary(photoProof.path);
+
 
         // Create Internship
         const internship = new Internship({
@@ -42,7 +45,8 @@ const createInternship = async (req, res) => {
             durationMonths,
             description,
             stipendInfo,
-            photoProof: photoProofUrl,
+            photoProof: proofUrl,
+            internshipReport: reportUrl,
         });
 
         await internship.save();
@@ -50,7 +54,7 @@ const createInternship = async (req, res) => {
 
     } catch (err) {
         console.error("Error in createInternship controller: ", err);
-        res.status(500).json({ success: false, error: err.message });
+        res.status(500).json({ success: false, message: "Internal Server Error. Please Try Again Later"});
     }
 };
 

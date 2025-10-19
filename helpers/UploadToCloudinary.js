@@ -22,11 +22,13 @@ const uploadToCloudinary = async (localFilePath) =>{
        console.error( "Failed to upload file to cloudinary: " ,error);
        throw error;
     } finally{
-        try {
-            await fs.unlink(localFilePath); // attempt cleanup even on error
-        } catch (err) {
-            console.error("Failed to delete temp file:", err);
-        }
+        fs.unlink(localFilePath, (err) => {
+            if (err) {
+                console.error("Failed to delete temp file:", err);
+            } else {
+                console.log("Temp file deleted:", localFilePath);
+            }
+        });
     }
 }
 

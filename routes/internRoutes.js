@@ -5,9 +5,17 @@ const { createInternship , getInternshipByStu , updateInternship , deleteInterns
 
 const verifyToken =require ("../middlewares/VerifyToken");
 
+const upload=require("../middlewares/multer");
+
 
 //route => internship
-router.post("/" , verifyToken , createInternship);
+router.post("/" , 
+    verifyToken , 
+    upload.fields([
+        { name: "internshipReport", maxCount: 1 },
+        { name: "photoProof", maxCount: 1 },
+    ]), 
+    createInternship);
 
 //get internship => student
 router.get("/:stuID" , getInternshipByStu);
