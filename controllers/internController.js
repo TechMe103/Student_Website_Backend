@@ -82,16 +82,6 @@ const getInternshipByStu = async(req , res) => {
 };
 
 
-//update internship
-const updateInternship = async(req , res) => {
-    try{
-        const internship = await Internship.findByIdAndUpdate(req.params.id , req.body , { new : true });
-        res.json(internship);
-    } catch(err) {
-        res.status(500).json({ error : err.message });
-    }
-};
-
 
 //get all internships --for admin 
 const getAllInternships = async (req, res) => {
@@ -204,11 +194,118 @@ const getSingleInternship = async (req, res) => {
 };
 
 
+const updateInternship = async (req, res) => {
+  try {
+
+    const userId=req.user.id; //its ok if request is from student or admin, as both can delete or update , but user has to exist compulsory
+
+    if(req.user.role==="admin"){
+        const adminExists = await Admin.findById(userId);
+        if (!adminExists) {
+            return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
+        }
+    }
+
+    if(req.user.role==="student"){
+        const student = await Student.findById(userId);
+        if (!student) {
+            return res.status(404).json({ success: false, message: "Student not found" });
+        }
+    }
+
+    const { internshipId } = req.params;
+
+    // Step 1: Get the existing internship
+    const existingInternship = await Internship.findById(internshipId);
+    if (!existingInternship) {
+      return res.status(404).json({ success: false, message: "Internship not found" });
+    }
+
+    // Step 2: Prepare updated data
+    const { companyName, startDate, endDate, role, durationMonths, isPaid: isPaidRaw, stipend, description } = req.body;
+
+    const isPaid = isPaidRaw === true || isPaidRaw === "true";
+    const stipendInfo = { isPaid };
+    if (isPaid) stipendInfo.stipend = stipend;
+
+    const updatedData = {
+      companyName,
+      startDate,
+      endDate,
+      role,
+      durationMonths,
+      description,
+      stipendInfo
+    };
+
+    // Step 3: Handle file updates
+    const internshipReportFile = req.files?.internshipReport?.[0];
+    const photoProofFile = req.files?.photoProof?.[0];
+
+    // internshipReport
+    if (internshipReportFile) {
+      if (existingInternship.internshipReport?.publicId) {
+        await cloudinary.uploader.destroy(existingInternship.internshipReport.publicId);
+      }
+      const reportResult = await uploadToCloudinary(internshipReportFile.path);
+      updatedData.internshipReport = {
+        url: reportResult.url,
+        publicId: reportResult.publicId,
+      };
+    }
+
+    // photoProof
+    if (photoProofFile) {
+      if (existingInternship.photoProof?.publicId) {
+        await cloudinary.uploader.destroy(existingInternship.photoProof.publicId);
+      }
+      const proofResult = await uploadToCloudinary(photoProofFile.path);
+      updatedData.photoProof = {
+        url: proofResult.url,
+        publicId: proofResult.publicId,
+      };
+    }
+
+    // Step 4: Perform update in DB
+    const updatedInternship = await Internship.findByIdAndUpdate(
+      internshipId,
+      { $set: updatedData },
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Internship updated successfully",
+      data: updatedInternship
+    });
+
+  } catch (err) {
+    console.error("Error in updateInternship:", err);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
 
 
 // DELETE a specific internship
 const deleteInternship = async (req, res) => {
   try {
+
+    const userId=req.user.id; //its ok if request is from student or admin, as both can delete or update , but user has to exist compulsory
+
+    if(req.user.role==="admin"){
+        const adminExists = await Admin.findById(userId);
+        if (!adminExists) {
+            return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
+        }
+    }
+
+    if(req.user.role==="student"){
+        const student = await Student.findById(userId);
+        if (!student) {
+            return res.status(404).json({ success: false, message: "Student not found" });
+        }
+    }
+
     const { internshipId } = req.params;
 
     // Find internship

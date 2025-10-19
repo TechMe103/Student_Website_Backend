@@ -15,7 +15,8 @@ router.post("/" ,
         { name: "internshipReport", maxCount: 1 },
         { name: "photoProof", maxCount: 1 },
     ]), 
-    createInternship);
+    createInternship
+);
 
 //get all internships 
 router.get("/all" , verifyToken, getAllInternships);
@@ -24,7 +25,14 @@ router.get("/all" , verifyToken, getAllInternships);
 router.get("/",verifyToken, getOwnInternships )
 
 //update internship
-router.put("/:id" ,verifyToken, updateInternship);
+router.put("/:internshipId" ,
+    verifyToken, 
+    upload.fields([
+        { name: "photoProof" }, 
+        { name: "internshipReport" }
+    ]),
+    updateInternship
+);
 
 
 //del internship
