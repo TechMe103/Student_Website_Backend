@@ -1,101 +1,140 @@
 const Achievement = require("../models/Achievement");
-const {uploadToCloudinary}=require("../helpers/UploadToCloudinary.js");
+const Student = require("../models/Student");
+const Admin = require("../models/Admin");
+const { uploadToCloudinary } = require("../helpers/UploadToCloudinary");
+const cloudinary = require("../config/cloudinaryConfig");
 
-// CREATE Achievement with Cloudinary uploads
+// CREATE Achievement
 const createAchievement = async (req, res) => {
   try {
-    
-    // Ensure both files are uploaded
-    if (!req.files?.eventPhoto || !req.files?.certificate) {
-      return res
-        .status(400)
-        .json({ error: "Both event photo and certificate are required" });
+    const studentId = req.user.id;
+
+    // Check if student exists
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Student not found" });
+    }
+
+    // Validate files
+    const eventPhotoFile = req.files?.eventPhoto?.[0];
+    const certificateFile = req.files?.certificate?.[0];
+
+    if (!eventPhotoFile || !certificateFile) {
+      return res.status(400).json({ success: false, message: "Both event photo and certificate are required" });
     }
 
     // Upload files to Cloudinary
-    const eventPhotoURL = await uploadToCloudinary(req.files.eventPhoto[0].path);
-    const certificateURL = await uploadToCloudinary(req.files.certificate[0].path);
+    const eventPhoto = await uploadToCloudinary(eventPhotoFile.path);
+    const certificate = await uploadToCloudinary(certificateFile.path);
 
     const achievement = new Achievement({
+      stuID: studentId,
       ...req.body,
       photographs: {
-        eventPhoto: eventPhotoURL,
-        certificateURL: certificateURL,
+        eventPhoto: { url: eventPhoto.url, publicId: eventPhoto.publicId },
+        certificate: { url: certificate.url, publicId: certificate.publicId },
       },
     });
 
     await achievement.save();
-    res.status(201).json(achievement);
+    res.status(201).json({ success: true, achievement });
   } catch (err) {
     console.error("Error creating achievement:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
 
-
-
-const getAchievementByStu = async( req, res) => {
-    try{
-        const achievement = await Achievement.find({ stuID : req.params.stuID }).populate("stuID" , "name roll branch");
-        res.json(achievement);
-    }catch(err) {
-        console.error("Error fetching achievements:", err);
-        res.status(500).json({ error : err.message });
-    }
+// GET Achievements by student
+const getAchievementByStu = async (req, res) => {
+  try {
+    const achievements = await Achievement.find({ stuID: req.params.stuID }).populate(
+      "stuID",
+      "name roll branch"
+    );
+    res.status(200).json({ success: true, data: achievements });
+  } catch (err) {
+    console.error("Error fetching achievements:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
 };
 
-//support updating files too => images
-
+// UPDATE Achievement
 const updateAchievement = async (req, res) => {
   try {
-    let updateData = { ...req.body };
+    const achievement = await Achievement.findById(req.params.id);
+    if (!achievement) {
+      return res.status(404).json({ success: false, message: "Achievement not found" });
+    }
 
-     // Initialize photographs object if needed
-    updateData.photographs = updateData.photographs || {};
-
-    // Upload new files if provided
+    // Handle new file uploads
     if (req.files?.eventPhoto) {
-      updateData.photographs.eventPhoto = await uploadToCloudinary(
-        req.files.eventPhoto[0].path
-      );
+      if (achievement.photographs.eventPhoto.publicId) {
+        await cloudinary.uploader.destroy(achievement.photographs.eventPhoto.publicId);
+      }
+      const newEventPhoto = await uploadToCloudinary(req.files.eventPhoto[0].path);
+      achievement.photographs.eventPhoto = { url: newEventPhoto.url, publicId: newEventPhoto.publicId };
     }
+
     if (req.files?.certificate) {
-      updateData.photographs.certificateURL = await uploadToCloudinary(
-        req.files.certificate[0].path
-      );
-    }
-    
-    const updatedAchievement = await Achievement.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true, runValidators: true }
-    );
-
-    if (!updatedAchievement) {
-      return res.status(404).json({ error: "Achievement not found" });
+      if (achievement.photographs.certificate.publicId) {
+        await cloudinary.uploader.destroy(achievement.photographs.certificate.publicId);
+      }
+      const newCertificate = await uploadToCloudinary(req.files.certificate[0].path);
+      achievement.photographs.certificate = { url: newCertificate.url, publicId: newCertificate.publicId };
     }
 
-    res.json(updatedAchievement);
+    // Update other fields
+    Object.assign(achievement, req.body);
+
+    await achievement.save();
+    res.status(200).json({ success: true, achievement });
   } catch (err) {
     console.error("Error updating achievement:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
 
-
-
-const deleteAchievement = async(req, res) => {
-    try {
-    const deleted = await Achievement.findByIdAndDelete(req.params.id);
-    if (!deleted) {
-      return res.status(404).json({ error: "Achievement not found" });
+// DELETE Achievement
+const deleteAchievement = async (req, res) => {
+  try {
+    const achievement = await Achievement.findById(req.params.id);
+    if (!achievement) {
+      return res.status(404).json({ success: false, message: "Achievement not found" });
     }
-    res.json({ message: "Achievement successfully deleted" });
+
+    // Delete files from Cloudinary
+    if (achievement.photographs.eventPhoto.publicId) {
+      await cloudinary.uploader.destroy(achievement.photographs.eventPhoto.publicId);
+    }
+    if (achievement.photographs.certificate.publicId) {
+      await cloudinary.uploader.destroy(achievement.photographs.certificate.publicId);
+    }
+
+    await achievement.remove();
+    res.status(200).json({ success: true, message: "Achievement deleted successfully" });
   } catch (err) {
     console.error("Error deleting achievement:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
 
+// GET all achievements (Admin)
+const getAllAchievements = async (req, res) => {
+  try {
+    const achievements = await Achievement.find()
+      .populate("stuID", "name branch year")
+      .sort({ createdAt: -1 });
+    res.status(200).json({ success: true, data: achievements });
+  } catch (err) {
+    console.error("Error fetching all achievements:", err);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
 
-module.exports = { createAchievement , getAchievementByStu , updateAchievement , deleteAchievement };
+module.exports = {
+  createAchievement,
+  getAchievementByStu,
+  updateAchievement,
+  deleteAchievement,
+  getAllAchievements,
+};
