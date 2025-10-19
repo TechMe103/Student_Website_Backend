@@ -4,16 +4,17 @@ const {uploadToCloudinary}=require("../helpers/UploadToCloudinary.js");
 // CREATE Achievement with Cloudinary uploads
 const createAchievement = async (req, res) => {
   try {
-    let eventPhotoURL = "";
-    let certificateURL = "";
+    
+    // Ensure both files are uploaded
+    if (!req.files?.eventPhoto || !req.files?.certificate) {
+      return res
+        .status(400)
+        .json({ error: "Both event photo and certificate are required" });
+    }
 
-    // Check if files exist (Multer stores them temporarily)
-    if (req.files?.eventPhoto) {
-      eventPhotoURL = await uploadToCloudinary(req.files.eventPhoto[0].path);
-    }
-    if (req.files?.certificate) {
-      certificateURL = await uploadToCloudinary(req.files.certificate[0].path);
-    }
+    // Upload files to Cloudinary
+    const eventPhotoURL = await uploadToCloudinary(req.files.eventPhoto[0].path);
+    const certificateURL = await uploadToCloudinary(req.files.certificate[0].path);
 
     const achievement = new Achievement({
       ...req.body,
@@ -49,18 +50,21 @@ const updateAchievement = async (req, res) => {
   try {
     let updateData = { ...req.body };
 
-    // If new files are uploaded, upload them to Cloudinary
+     // Initialize photographs object if needed
+    updateData.photographs = updateData.photographs || {};
+
+    // Upload new files if provided
     if (req.files?.eventPhoto) {
-      updateData["photographs.eventPhoto"] = await uploadToCloudinary(
+      updateData.photographs.eventPhoto = await uploadToCloudinary(
         req.files.eventPhoto[0].path
       );
     }
     if (req.files?.certificate) {
-      updateData["photographs.certificateURL"] = await uploadToCloudinary(
+      updateData.photographs.certificateURL = await uploadToCloudinary(
         req.files.certificate[0].path
       );
     }
-
+    
     const updatedAchievement = await Achievement.findByIdAndUpdate(
       req.params.id,
       updateData,
