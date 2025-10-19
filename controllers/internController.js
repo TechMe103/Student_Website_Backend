@@ -1,39 +1,45 @@
 const Internship = require("../models/Internship");
 const Student = require("../models/Student");
 const  {uploadToCloudinary}=require("../helpers/UploadToCloudinary");
+const Admin = require("../models/Admin");
+const cloudinary = require("../config/cloudinaryConfig");
 
 
 const createInternship = async (req, res) => {
     try {
         const { id } = req.user;
 
-        // Optional: check if student exists
+        // Check if student exists
         const student = await Student.findById(id);
         if (!student) {
             return res.status(404).json({ success: false, message: "Student not found" });
         }
 
-        const { companyName, startDate, endDate, role, durationMonths, isPaid, stipend, description } = req.body;
+        const { companyName, startDate, endDate, role, durationMonths, isPaid: isPaidRaw, stipend, description } = req.body;
+
+        // Convert isPaid to boolean if it's a string
+        const isPaid = isPaidRaw === true || isPaidRaw === "true";
 
         // Manual check: stipend required if isPaid is true
-        if (isPaid === true && (stipend === undefined || stipend === null)) {
+        if (isPaid && (stipend === undefined || stipend === null)) {
             return res.status(400).json({ success: false, message: "Stipend amount required if internship is paid" });
         }
 
         // Build stipendInfo object
         const stipendInfo = { isPaid };
-        if (isPaid) stipendInfo.stipend = stipend; // only add stipend if isPaid is true
+        if (isPaid) stipendInfo.stipend = stipend;
 
+        // Access uploaded files safely
         const internshipReport = req.files?.internshipReport?.[0];
         const photoProof = req.files?.photoProof?.[0];
 
-        console.log("Report File:", internshipReport);
-        console.log("Photo Proof:", photoProof);
+        if (!internshipReport || !photoProof) {
+            return res.status(400).json({ success: false, message: "Both internship report and photo proof are required" });
+        }
 
-        // You can now upload both files to Cloudinary:
-        const reportUrl = await uploadToCloudinary(internshipReport.path);
-        const proofUrl = await uploadToCloudinary(photoProof.path);
-
+        // Upload files to Cloudinary and get both URL and publicId
+        const reportResult = await uploadToCloudinary(internshipReport.path);
+        const proofResult = await uploadToCloudinary(photoProof.path);
 
         // Create Internship
         const internship = new Internship({
@@ -45,8 +51,14 @@ const createInternship = async (req, res) => {
             durationMonths,
             description,
             stipendInfo,
-            photoProof: proofUrl,
-            internshipReport: reportUrl,
+            internshipReport: {
+                url: reportResult.url,
+                publicId: reportResult.publicId
+            },
+            photoProof: {
+                url: proofResult.url,
+                publicId: proofResult.publicId
+            }
         });
 
         await internship.save();
@@ -54,7 +66,7 @@ const createInternship = async (req, res) => {
 
     } catch (err) {
         console.error("Error in createInternship controller: ", err);
-        res.status(500).json({ success: false, message: "Internal Server Error. Please Try Again Later"});
+        res.status(500).json({ success: false, message: "Internal Server Error. Please Try Again Later" });
     }
 };
 
@@ -81,15 +93,148 @@ const updateInternship = async(req , res) => {
 };
 
 
-//delete internship
+//get all internships --for admin 
+const getAllInternships = async (req, res) => {
+    try {
+        // Find all internships and populate student details
+        const internships = await Internship.find()
+            .populate({
+                path: "stuID",
+                select: "name branch year"  // only these fields
+            })
+            .sort({ createdAt: -1 }); // newest first
 
-const deleteInternship = async(req , res) => {
-    try{
-        await Internship.findByIdAndDelete(req.params.id);
-        res.json( { message : "Internship deleted"});
-    }catch(err) {
-        res.status(500).json({ error : err.message });
+        res.status(200).json({ success: true, data: internships });
+    } catch (error) {
+        console.error("Error in getAllInternships:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
     }
 };
 
-module.exports = { createInternship , getInternshipByStu , updateInternship , deleteInternship };
+
+
+
+
+// Get internships by studentId --for student
+
+const getOwnInternships = async (req, res) => {
+
+    try {
+        const studentId = req.user.id; // always the logged-in student
+
+        const student = await Student.findById(studentId);
+        if (!student) {
+            return res.status(404).json({ success: false, message: "Student not found" });
+        }
+
+        const internships = await Internship.find({ stuID: studentId }).sort({ startDate: -1 });
+
+        res.status(200).json({ success: true, data: internships });
+    } catch (error) {
+        console.error("Error in getOwnInternships:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
+    }
+};
+
+
+//GET internships by studentId -- for admin
+//use case:- admin clicks on student -> clicks on internships -> then internships are shown
+// controllers/adminInternshipController.js
+const getStudentInternshipsByAdmin = async (req, res) => {
+    try {
+        const adminId = req.user.id;
+
+        // Verify admin exists
+        const adminExists = await Admin.findById(adminId);
+        if (!adminExists) {
+            return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
+        }
+
+        const { studentId } = req.params;
+        if (!studentId) {
+            return res.status(400).json({ success: false, message: "Student ID is required" });
+        }
+
+        // Verify student exists
+        const studentExists = await Student.findById(studentId);
+        if (!studentExists) {
+            return res.status(404).json({ success: false, message: "Student not found" });
+        }
+
+        const internships = await Internship.find({ stuID: studentId })
+            .sort({ startDate: -1 });
+
+        res.status(200).json({ success: true, data: internships });
+    } catch (error) {
+        console.error("Error in getStudentInternshipsByAdmin:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
+    }
+};
+
+
+
+
+
+
+// GET single internship details by internshipId --for both admin and student
+//use case for student:- when student clicks on a single internship to  view details or update it( before upddating, details are required)
+//use case for admin:- in all internshipd, admin clicks on single internship to get its details
+const getSingleInternship = async (req, res) => {
+    try {
+        const { internshipId } = req.params;
+        if (!internshipId) {
+            return res.status(400).json({ success: false, message: "Internship ID is required" });
+        }
+
+        const userId=req.user.id;
+        //check this userID in both admin or student, if not exissts error should come
+
+        const internship = await Internship.findById(internshipId)
+            .populate({ path: "stuID", select: "name branch year" });
+
+        if (!internship) {
+            return res.status(404).json({ success: false, message: "Internship not found" });
+        }
+
+        res.status(200).json({ success: true, data: internship });
+    } catch (error) {
+        console.error("Error in getSingleInternship:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
+    }
+};
+
+
+
+
+// DELETE a specific internship
+const deleteInternship = async (req, res) => {
+  try {
+    const { internshipId } = req.params;
+
+    // Find internship
+    const internship = await Internship.findById(internshipId);
+    if (!internship) {
+      return res.status(404).json({ success: false, message: "Internship not found" });
+    }
+
+    // Delete files from Cloudinary if public_id exists
+    if (internship.internshipReport.publicId) {
+      await cloudinary.uploader.destroy(internship.internshipReport.publicId);
+    }
+    if (internship.photoProof.publicId) {
+      await cloudinary.uploader.destroy(internship.photoProof.publicId);
+    }
+
+    // Delete internship document from DB
+    await Internship.findByIdAndDelete(internshipId);
+
+    res.status(200).json({ success: true, message: "Internship deleted successfully" });
+  } catch (err) {
+    console.error("Error in deleteInternship controller:", err);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+module.exports = deleteInternship;
+
+module.exports = { createInternship , getAllInternships  , getOwnInternships , getStudentInternshipsByAdmin , getSingleInternship , updateInternship , deleteInternship };

@@ -20,7 +20,7 @@ const cookieOptions = {
 // ---------------- SIGNUP ----------------
 exports.signup = async (req, res) => {
     try {
-        const { firstName, middleName, lastName, studentID, PRN, email, password } = req.body;
+        const { firstName, middleName, lastName, studentID, PRN, email, password, branch, year } = req.body;
 
         // Validate input using Joi
         const { error } = signupSchema.validate(req.body, { abortEarly: false });
@@ -47,9 +47,17 @@ exports.signup = async (req, res) => {
         const existingPRN = await Student.findOne({ PRN });
         if (existingPRN) return res.status(400).json({ success: false, message: 'PRN already exists' });
 
-        let photoUrl = null;
-            if (req.file) {
-            photoUrl = await uploadToCloudinary(req.file.path);
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: "Student photo is required" });
+        }
+
+        let studentPhoto = null;
+        if (req.file) {
+            const uploaded = await uploadToCloudinary(req.file.path);
+            studentPhoto = {
+                url: uploaded.url,
+                publicId: uploaded.publicId
+            };
         }
 
         // Hash password
@@ -62,7 +70,9 @@ exports.signup = async (req, res) => {
             PRN,
             email,
             password: hashedPassword,
-            studentPhoto : photoUrl,
+            branch,
+            year,
+            studentPhoto
         });
 
         // Create JWT

@@ -8,10 +8,7 @@ const PersonalDetailSchema = new mongoose.Schema({
         required : true 
     } , 
 
-    branch: {
-        type: String,
-        enum : ["Computer", "IT", "AIDS", "Civil", "Chemical", "Mechanical"],
-    },
+
 
     dob: Date,
 

@@ -8,6 +8,8 @@ const signupSchema = Joi.object({
     middleName: Joi.string().pattern(/^[A-Za-z]+$/).required(),
     lastName: Joi.string().pattern(/^[A-Za-z]+$/).required(),
     PRN : Joi.string().pattern(/^[1-9]\d{14}$/).required(),
+    branch: Joi.string().valid("Computer", "IT", "AIDS", "Civil", "Chemical", "Mechanical").required(),
+    year: Joi.string().valid("SE", "TE", "BE").required(),
 
 });
 

@@ -14,12 +14,24 @@ const studentSchema = new mongoose.Schema({
     email: { type: String, unique: true , required: true },
     password: { type: String,  required: true },
 
+    branch: {
+        type: String,
+        enum : ["Computer", "IT", "AIDS", "Civil", "Chemical", "Mechanical"],
+    },
+
+    year : {
+        type: String,
+        enum : [ "SE", "TE", "BE"],
+    },
+
     //uncomment required:true field when cloudinary is implemented in the project
 
-    studentPhoto : {
-        type: String,
-        // required: true ,
-    } , 
+    // Store both Cloudinary URL and publicId for deletion
+    studentPhoto: {
+        url: { type: String },       // Cloudinary secure URL
+        publicId: { type: String },  // Cloudinary public_id
+        // required: true,          // uncomment if photo is mandatory
+    }
 
 }, 
 { timestamps: true });

@@ -1,19 +1,19 @@
 const mongoose = require("mongoose");
 
 const internshipSchema = new mongoose.Schema({
-    stuID : {
-        type : mongoose.Schema.Types.ObjectId , 
-        ref : "Student" , 
-        required : true
-    } , 
+    stuID: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Student",
+        required: true
+    },
 
-    companyName : {type: String, required: true}, 
+    companyName: { type: String, required: true },
 
-    role : {type: String, required: true}, 
+    role: { type: String, required: true },
 
-    startDate: {type: Date, required:true},
+    startDate: { type: Date, required: true },
 
-    endDate: {type:Date, required:true},
+    endDate: { type: Date, required: true },
 
     durationMonths: {
         type: Number,
@@ -24,33 +24,27 @@ const internshipSchema = new mongoose.Schema({
 
     stipendInfo: {
         isPaid: { type: Boolean, required: true },
-        stipend: { 
+        stipend: {
             type: Number,
-            required: function() {
-                return this.stipendInfo?.isPaid === true;  // stipend is required if isPaid = true
+            required: function () {
+                return this.stipendInfo?.isPaid === true;
             }
         }
     },
 
+    description: { type: String, required: true },
 
-
-    description : {type: String, required: true}, 
-
-    //certifictes, photopgrahs, and report ( pdf ) --yet to decide how to implement these
-
-    
-    internshipReport : {
-        //pdf format
-        type:String,
+    // Certificates, photographs, and report (pdf)
+    internshipReport: {
+        url: { type: String },          // Cloudinary secure URL
+        publicId: { type: String },     // Cloudinary public_id for deletion
     },
 
-    photoProof : { 
-        //jpg format
-        type: String,
-    },
+    photoProof: {
+        url: { type: String },          // Cloudinary secure URL
+        publicId: { type: String },     // Cloudinary public_id for deletion
+    }
 
-    
-} , 
-{timestamps: true});
+}, { timestamps: true });
 
-module.exports = mongoose.model("Internship" , internshipSchema);
+module.exports = mongoose.model("Internship", internshipSchema);

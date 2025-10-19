@@ -15,7 +15,10 @@ const uploadToCloudinary = async (localFilePath) =>{
             folder : "studentWebsite",
         });
 
-        return result.secure_url;
+        return {
+            url: result.secure_url,
+            publicId: result.public_id
+        };
 
     } catch (error) {
        

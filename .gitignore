@@ -5,7 +5,7 @@ node_modules/
 .env
 
 # Admin Script
-adminScript.js
+seedAdmin.js
 
 # Logs
 npm-debug.log*
