@@ -32,4 +32,33 @@ const updateSemInfo = async (req, res) => {
     }
 };
 
-module.exports = { addSemInfo , getSemInfoByStu , updateSemInfo };
+
+const deleteSemInfo = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deletedSem = await SemesterInfo.findByIdAndDelete(id);
+
+    if (!deletedSem) {
+      return res.status(404).json({
+        success: false,
+        message: "Semester info not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Semester info deleted successfully",
+      data: deletedSem,
+    });
+  } catch (err) {
+    console.error("Error deleting semester info:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete semester info",
+      error: err.message,
+    });
+  }
+};
+
+module.exports = { addSemInfo , getSemInfoByStu , updateSemInfo , deleteSemInfo };
