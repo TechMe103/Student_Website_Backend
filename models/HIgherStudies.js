@@ -1,33 +1,28 @@
 const mongoose = require("mongoose");
 
-const placementSchema = new mongoose.Schema({
+const higherStudiesSchema = new mongoose.Schema({
   stuID: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Student",
     required: true,
   },
 
-  companyName: {
+  examName: {
     type: String,
+    enum: ["GATE", "CAT", "GRE", "TOFEL", "IELTS", "UPSC"],
     required: true,
   },
 
-  role: {
-    type: String,
+  score: {
+    type: Number,
     required: true,
   },
 
-  placementType: {
-    type: String,
-    enum: ["Campus", "Off-Campus"],
-    required: true,
-  },
-
-  placementProof: {
+  marksheet: {
     url: { type: String },      // Cloudinary secure URL
     publicId: { type: String }, // Cloudinary public_id for deletion
   },
 },
 { timestamps: true });
 
-module.exports = mongoose.model("Placement", placementSchema);
+module.exports = mongoose.model("HigherStudies", higherStudiesSchema);
