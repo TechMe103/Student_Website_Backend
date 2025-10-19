@@ -6,6 +6,7 @@ const createActivity = async(req , res) => {
         await activity.save();
         res.status(201).json(activity);
     } catch(err) {
+        console.error("Error creating activity" , err); 
         res.status(500).json({ error : err.message });
     }
 };
@@ -15,6 +16,7 @@ const getActivityByStu = async(req, res ) => {
         const activities = await Activity.find({ stuID : req.params.stuID }).populate("stuID" , "name roll branch");
         res.json(activities);
     }catch(err) {
+        console.error("Error fetching activities" , err); 
         res.status(500).json({ error : err.message });
     }
 };
@@ -24,6 +26,7 @@ const updateActivity = async (req ,res) =>{
         const activity = await Activity.findByIdAndUpdate(req.params.id , req.body , { new : true });
         res.json(activity);
     }catch(err) {
+        console.error("Error updating activity" , err); 
         res.status(500).json({ error : err.message });
     }
 };
@@ -33,6 +36,7 @@ const deleteActivity = async(req , res) => {
         await Activity.findByIdAndDelete(req.params.id);
         res.json({message : "Activity successfully deleted"});
     }catch(err){
+        console.error("Error deleting activity" , err); 
         res.status(500).json({error : err.message});
     }
 };
