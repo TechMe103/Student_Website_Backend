@@ -3,9 +3,11 @@ const router = express.Router();
 
 const { createInternship , getInternshipByStu , updateInternship , deleteInternship } = require("../controllers/internController");
 
+const verifyToken =require ("../middlewares/VerifyToken");
+
 
 //route => internship
-router.post("/" , createInternship);
+router.post("/" , verifyToken , createInternship);
 
 //get internship => student
 router.get("/:stuID" , getInternshipByStu);

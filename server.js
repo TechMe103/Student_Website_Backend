@@ -19,7 +19,7 @@ app.use(cookieParser());
 
 // Routes
 app.use("/api/auth", require('./routes/authRoutes'));
-app.use("/api/internships" , require("./routes/internRoutes"));
+app.use("/api/internship" , require("./routes/internRoutes"));
 app.use("/api/achievements", require("./routes/achievementRoutes"));
 app.use("/api/activities", require("./routes/activitiesRoutes"));
 app.use("/api/semesterInfo", require("./routes/semInfoRoutes"));

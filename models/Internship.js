@@ -18,7 +18,7 @@ const internshipSchema = new mongoose.Schema({
     durationMonths: {
         type: Number,
         min: 1,
-        max: 12,
+        max: 6,
         required: true
     },
 
@@ -33,9 +33,21 @@ const internshipSchema = new mongoose.Schema({
     },
 
 
+
     description : {type: String, required: true}, 
 
     //certifictes, photopgrahs, and report ( pdf ) --yet to decide how to implement these
+
+    
+    internshipReport : {
+        //pdf format
+        type:String,
+    },
+
+    photoProof : { 
+        //jpg format
+        type: String,
+    },
 
     
 } , 
