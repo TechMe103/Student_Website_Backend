@@ -37,15 +37,14 @@ const internshipSchema = new mongoose.Schema({
 
     // Certificates, photographs, and report (pdf)
     internshipReport: {
-        url: { type: String },          // Cloudinary secure URL
-        publicId: { type: String },     // Cloudinary public_id for deletion
-        required : true,
+        url: { type: String, required : true },          // Cloudinary secure URL
+        publicId: { type: String, required : true },     // Cloudinary public_id for deletion
     },
 
     photoProof: {
-        url: { type: String },          // Cloudinary secure URL
-        publicId: { type: String },     // Cloudinary public_id for deletion
-        required : true,
+        url: { type: String, required : true, },          // Cloudinary secure URL
+        publicId: { type: String, required : true },     // Cloudinary public_id for deletion
+        
     }
 
 }, { timestamps: true });
