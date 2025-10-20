@@ -17,9 +17,7 @@ const createInternship = async (req, res) => {
 
         const { companyName, startDate, endDate, role, durationMonths, isPaid: isPaidRaw, stipend, description } = req.body;
 
-        if(!companyName || companyName===""){
-            return res.status(400).json({ success: false, message: "All fields are required" });
-        }
+        //Later on integrate the joi validation created for this controller
 
         // Convert isPaid to boolean if it's a string
         const isPaid = isPaidRaw === true || isPaidRaw === "true";
@@ -70,6 +68,7 @@ const createInternship = async (req, res) => {
 
     } catch (err) {
         console.error("Error in createInternship controller: ", err);
+
         // 🧹 Cleanup Cloudinary if files were uploaded but save failed
         if (req.files) {
             const uploadedFiles = [];
@@ -268,6 +267,8 @@ const updateInternship = async (req, res) => {
         }
 
         const { companyName, startDate, endDate, role, durationMonths, isPaid: isPaidRaw, stipend, description } = req.body;
+
+        //Later on integrate the joi validation created for this controller
 
         const isPaid = isPaidRaw === true || isPaidRaw === "true";
         const stipendInfo = { isPaid };
