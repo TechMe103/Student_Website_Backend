@@ -8,8 +8,6 @@ const PersonalDetailSchema = new mongoose.Schema({
         required : true 
     } , 
 
-
-
     dob: Date,
 
     bloodGroup: {
