@@ -17,6 +17,10 @@ const createInternship = async (req, res) => {
 
         const { companyName, startDate, endDate, role, durationMonths, isPaid: isPaidRaw, stipend, description } = req.body;
 
+        if(!companyName || companyName===""){
+            return res.status(400).json({ success: false, message: "All fields are required" });
+        }
+
         // Convert isPaid to boolean if it's a string
         const isPaid = isPaidRaw === true || isPaidRaw === "true";
 
@@ -66,6 +70,22 @@ const createInternship = async (req, res) => {
 
     } catch (err) {
         console.error("Error in createInternship controller: ", err);
+        // 🧹 Cleanup Cloudinary if files were uploaded but save failed
+        if (req.files) {
+            const uploadedFiles = [];
+            if (req.files.internshipReport?.[0]) uploadedFiles.push(req.files.internshipReport[0]);
+            if (req.files.photoProof?.[0]) uploadedFiles.push(req.files.photoProof[0]);
+            for (const file of uploadedFiles) {
+                try {
+                    const uploadRes = await uploadToCloudinary(file.path);
+                    if (uploadRes?.publicId) {
+                        await cloudinary.uploader.destroy(uploadRes.publicId);
+                    }
+                } catch (cleanupErr) {
+                    console.error("Failed to cleanup Cloudinary file:", cleanupErr);
+                }
+            }
+        }
         res.status(500).json({ success: false, message: "Internal Server Error. Please Try Again Later" });
     }
 };
@@ -86,6 +106,16 @@ const getInternshipByStu = async(req , res) => {
 //get all internships --for admin 
 const getAllInternships = async (req, res) => {
     try {
+
+
+        const adminId = req.user.id;
+
+        // Verify admin exists
+        const adminExists = await Admin.findById(adminId);
+        if (!adminExists) {
+            return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
+        }
+
         // Find all internships and populate student details
         const internships = await Internship.find()
             .populate({
@@ -152,6 +182,10 @@ const getStudentInternshipsByAdmin = async (req, res) => {
         }
 
         const internships = await Internship.find({ stuID: studentId })
+            .populate({
+                path: "stuID",
+                select: "name branch year"  // only these fields
+            })
             .sort({ startDate: -1 });
 
         res.status(200).json({ success: true, data: internships });
@@ -177,7 +211,21 @@ const getSingleInternship = async (req, res) => {
         }
 
         const userId=req.user.id;
+
         //check this userID in both admin or student, if not exissts error should come
+        if(req.user.role==="admin"){
+            const adminExists = await Admin.findById(userId);
+            if (!adminExists) {
+                return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
+            }
+        }
+
+        if(req.user.role==="student"){
+            const student = await Student.findById(userId);
+            if (!student) {
+                return res.status(404).json({ success: false, message: "Student not found" });
+            }
+        }
 
         const internship = await Internship.findById(internshipId)
             .populate({ path: "stuID", select: "name branch year" });
@@ -195,94 +243,113 @@ const getSingleInternship = async (req, res) => {
 
 
 const updateInternship = async (req, res) => {
-  try {
+    try {
+        const userId = req.user.id;
 
-    const userId=req.user.id; //its ok if request is from student or admin, as both can delete or update , but user has to exist compulsory
-
-    if(req.user.role==="admin"){
+        // Authorization checks (already perfect in your version)
+        if (req.user.role === "admin") {
         const adminExists = await Admin.findById(userId);
         if (!adminExists) {
             return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
         }
-    }
+        }
 
-    if(req.user.role==="student"){
+        if (req.user.role === "student") {
         const student = await Student.findById(userId);
         if (!student) {
             return res.status(404).json({ success: false, message: "Student not found" });
         }
+        }
+
+        const { internshipId } = req.params;
+        const existingInternship = await Internship.findById(internshipId);
+        if (!existingInternship) {
+        return res.status(404).json({ success: false, message: "Internship not found" });
+        }
+
+        const { companyName, startDate, endDate, role, durationMonths, isPaid: isPaidRaw, stipend, description } = req.body;
+
+        const isPaid = isPaidRaw === true || isPaidRaw === "true";
+        const stipendInfo = { isPaid };
+        if (isPaid) stipendInfo.stipend = stipend;
+
+        const updatedData = {
+        companyName,
+        startDate,
+        endDate,
+        role,
+        durationMonths,
+        description,
+        stipendInfo
+        };
+
+        // Track newly uploaded public IDs (for cleanup if DB fails)
+        let newReportPublicId = null;
+        let newProofPublicId = null;
+
+        // Handle internshipReport upload
+        const internshipReportFile = req.files?.internshipReport?.[0];
+        if (internshipReportFile) {
+        const reportResult = await uploadToCloudinary(internshipReportFile.path);
+        newReportPublicId = reportResult.publicId;
+
+        // Delete old report file after successful upload (safer)
+        if (existingInternship.internshipReport?.publicId) {
+            await cloudinary.uploader.destroy(existingInternship.internshipReport.publicId);
+        }
+
+        updatedData.internshipReport = {
+            url: reportResult.url,
+            publicId: reportResult.publicId
+        };
+        }
+
+        // Handle photoProof upload
+        const photoProofFile = req.files?.photoProof?.[0];
+        if (photoProofFile) {
+        const proofResult = await uploadToCloudinary(photoProofFile.path);
+        newProofPublicId = proofResult.publicId;
+
+        // Delete old proof file after successful upload (safer)
+        if (existingInternship.photoProof?.publicId) {
+            await cloudinary.uploader.destroy(existingInternship.photoProof.publicId);
+        }
+
+        updatedData.photoProof = {
+            url: proofResult.url,
+            publicId: proofResult.publicId
+        };
+        }
+
+        // Update DB
+        const updatedInternship = await Internship.findByIdAndUpdate(
+        internshipId,
+        { $set: updatedData },
+        { new: true, runValidators: true }
+        );
+
+        if (!updatedInternship) {
+        // If DB update failed — cleanup newly uploaded files
+        if (newReportPublicId) await cloudinary.uploader.destroy(newReportPublicId);
+        if (newProofPublicId) await cloudinary.uploader.destroy(newProofPublicId);
+        return res.status(500).json({ success: false, message: "Failed to update internship" });
+        }
+
+        res.status(200).json({
+        success: true,
+        message: "Internship updated successfully",
+        data: updatedInternship
+        });
+
+    } catch (err) {
+        console.error("Error in updateInternship:", err);
+
+        // Cleanup any uploaded files if the error occurred mid-way
+        if (newReportPublicId) await cloudinary.uploader.destroy(newReportPublicId);
+        if (newProofPublicId) await cloudinary.uploader.destroy(newProofPublicId);
+
+        res.status(500).json({ success: false, message: "Internal Server Error" });
     }
-
-    const { internshipId } = req.params;
-
-    // Step 1: Get the existing internship
-    const existingInternship = await Internship.findById(internshipId);
-    if (!existingInternship) {
-      return res.status(404).json({ success: false, message: "Internship not found" });
-    }
-
-    // Step 2: Prepare updated data
-    const { companyName, startDate, endDate, role, durationMonths, isPaid: isPaidRaw, stipend, description } = req.body;
-
-    const isPaid = isPaidRaw === true || isPaidRaw === "true";
-    const stipendInfo = { isPaid };
-    if (isPaid) stipendInfo.stipend = stipend;
-
-    const updatedData = {
-      companyName,
-      startDate,
-      endDate,
-      role,
-      durationMonths,
-      description,
-      stipendInfo
-    };
-
-    // Step 3: Handle file updates
-    const internshipReportFile = req.files?.internshipReport?.[0];
-    const photoProofFile = req.files?.photoProof?.[0];
-
-    // internshipReport
-    if (internshipReportFile) {
-      if (existingInternship.internshipReport?.publicId) {
-        await cloudinary.uploader.destroy(existingInternship.internshipReport.publicId);
-      }
-      const reportResult = await uploadToCloudinary(internshipReportFile.path);
-      updatedData.internshipReport = {
-        url: reportResult.url,
-        publicId: reportResult.publicId,
-      };
-    }
-
-    // photoProof
-    if (photoProofFile) {
-      if (existingInternship.photoProof?.publicId) {
-        await cloudinary.uploader.destroy(existingInternship.photoProof.publicId);
-      }
-      const proofResult = await uploadToCloudinary(photoProofFile.path);
-      updatedData.photoProof = {
-        url: proofResult.url,
-        publicId: proofResult.publicId,
-      };
-    }
-
-    // Step 4: Perform update in DB
-    const updatedInternship = await Internship.findByIdAndUpdate(
-      internshipId,
-      { $set: updatedData },
-      { new: true, runValidators: true }
-    );
-
-    res.status(200).json({
-      success: true,
-      message: "Internship updated successfully",
-      data: updatedInternship
-    });
-
-  } catch (err) {
-    console.error("Error in updateInternship:", err);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
-  }
 };
 
 
@@ -332,6 +399,5 @@ const deleteInternship = async (req, res) => {
   }
 };
 
-module.exports = deleteInternship;
 
 module.exports = { createInternship , getAllInternships  , getOwnInternships , getStudentInternshipsByAdmin , getSingleInternship , updateInternship , deleteInternship };
