@@ -1,3 +1,4 @@
+const { required } = require("joi");
 const mongoose = require("mongoose");
 
 const internshipSchema = new mongoose.Schema({
@@ -38,11 +39,13 @@ const internshipSchema = new mongoose.Schema({
     internshipReport: {
         url: { type: String },          // Cloudinary secure URL
         publicId: { type: String },     // Cloudinary public_id for deletion
+        required : true,
     },
 
     photoProof: {
         url: { type: String },          // Cloudinary secure URL
         publicId: { type: String },     // Cloudinary public_id for deletion
+        required : true,
     }
 
 }, { timestamps: true });
