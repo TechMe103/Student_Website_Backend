@@ -27,6 +27,7 @@ app.use("/api/achievements", require("./routes/achievementRoutes"));
 app.use("/api/activities", require("./routes/activitiesRoutes"));
 app.use("/api/semesterInfo", require("./routes/semInfoRoutes"));
 app.use("/api/placement", require("./routes/PlacementRoutes"));
+app.use("/api/higherStudies", require("./routes/HigherStudiesRoutes"));
 
 
 app.get("/" , (req, res) => {
