@@ -275,13 +275,13 @@ const updateInternship = async (req, res) => {
         if (isPaid) stipendInfo.stipend = stipend;
 
         const updatedData = {
-        companyName,
-        startDate,
-        endDate,
-        role,
-        durationMonths,
-        description,
-        stipendInfo
+            companyName,
+            startDate,
+            endDate,
+            role,
+            durationMonths,
+            description,
+            stipendInfo
         };
 
         // Track newly uploaded public IDs (for cleanup if DB fails)
@@ -291,55 +291,55 @@ const updateInternship = async (req, res) => {
         // Handle internshipReport upload
         const internshipReportFile = req.files?.internshipReport?.[0];
         if (internshipReportFile) {
-        const reportResult = await uploadToCloudinary(internshipReportFile.path);
-        newReportPublicId = reportResult.publicId;
+            const reportResult = await uploadToCloudinary(internshipReportFile.path);
+            newReportPublicId = reportResult.publicId;
 
-        // Delete old report file after successful upload (safer)
-        if (existingInternship.internshipReport?.publicId) {
-            await cloudinary.uploader.destroy(existingInternship.internshipReport.publicId);
-        }
+            // Delete old report file after successful upload (safer)
+            if (existingInternship.internshipReport?.publicId) {
+                await cloudinary.uploader.destroy(existingInternship.internshipReport.publicId);
+            }
 
-        updatedData.internshipReport = {
-            url: reportResult.url,
-            publicId: reportResult.publicId
-        };
+            updatedData.internshipReport = {
+                url: reportResult.url,
+                publicId: reportResult.publicId
+            };
         }
 
         // Handle photoProof upload
         const photoProofFile = req.files?.photoProof?.[0];
         if (photoProofFile) {
-        const proofResult = await uploadToCloudinary(photoProofFile.path);
-        newProofPublicId = proofResult.publicId;
+            const proofResult = await uploadToCloudinary(photoProofFile.path);
+            newProofPublicId = proofResult.publicId;
 
-        // Delete old proof file after successful upload (safer)
-        if (existingInternship.photoProof?.publicId) {
-            await cloudinary.uploader.destroy(existingInternship.photoProof.publicId);
-        }
+            // Delete old proof file after successful upload (safer)
+            if (existingInternship.photoProof?.publicId) {
+                await cloudinary.uploader.destroy(existingInternship.photoProof.publicId);
+            }
 
-        updatedData.photoProof = {
-            url: proofResult.url,
-            publicId: proofResult.publicId
-        };
+            updatedData.photoProof = {
+                url: proofResult.url,
+                publicId: proofResult.publicId
+            };
         }
 
         // Update DB
         const updatedInternship = await Internship.findByIdAndUpdate(
-        internshipId,
-        { $set: updatedData },
-        { new: true, runValidators: true }
+            internshipId,
+            { $set: updatedData },
+            { new: true, runValidators: true }
         );
 
         if (!updatedInternship) {
-        // If DB update failed — cleanup newly uploaded files
-        if (newReportPublicId) await cloudinary.uploader.destroy(newReportPublicId);
-        if (newProofPublicId) await cloudinary.uploader.destroy(newProofPublicId);
-        return res.status(500).json({ success: false, message: "Failed to update internship" });
+            // If DB update failed — cleanup newly uploaded files
+            if (newReportPublicId) await cloudinary.uploader.destroy(newReportPublicId);
+            if (newProofPublicId) await cloudinary.uploader.destroy(newProofPublicId);
+            return res.status(500).json({ success: false, message: "Failed to update internship" });
         }
 
         res.status(200).json({
-        success: true,
-        message: "Internship updated successfully",
-        data: updatedInternship
+            success: true,
+            message: "Internship updated successfully",
+            data: updatedInternship
         });
 
     } catch (err) {
