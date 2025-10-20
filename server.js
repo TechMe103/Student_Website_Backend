@@ -26,6 +26,7 @@ app.use("/api/internship" , require("./routes/internRoutes"));
 app.use("/api/achievements", require("./routes/achievementRoutes"));
 app.use("/api/activities", require("./routes/activitiesRoutes"));
 app.use("/api/semesterInfo", require("./routes/semInfoRoutes"));
+app.use("/api/placement", require("./routes/PlacementRoutes"));
 
 
 app.get("/" , (req, res) => {
