@@ -29,6 +29,7 @@ app.use("/api/semesterInfo", require("./routes/semInfoRoutes"));
 app.use("/api/placement", require("./routes/PlacementRoutes"));
 app.use("/api/higherStudies", require("./routes/HigherStudiesRoutes"));
 app.use("/api/personalDetail", require("./routes/PersonalDetailRoutes"));
+app.use("/api/student", require("./routes/StudentRoutes"));
 
 
 app.get("/" , (req, res) => {

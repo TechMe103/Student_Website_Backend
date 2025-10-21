@@ -15,7 +15,8 @@ const signupSchema = Joi.object({
 
 const loginSchema = Joi.object({
     studentID: Joi.string().pattern(/^[0-9]{4}[A-Z]{4}[0-9]{3}$/).required(),
-    password: Joi.string().pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,14}$/).required(),
+    // password: Joi.string().pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,14}$/).required(),
+    password: Joi.string().pattern(/^[A-Za-z0-9+/]{14}$/).required(),
 
 });
 

@@ -3,16 +3,16 @@ const mongoose = require('mongoose');
 const studentSchema = new mongoose.Schema({
 
     name: {
-        firstName : { type : String , required : true } ,
-        middleName : { type : String , required : true } ,
-        lastName : { type : String , required : true } ,
+        firstName : { type : String , } ,
+        middleName : { type : String , } ,
+        lastName : { type : String , } ,
     },
 
-    PRN: { type: String, required: true , unique: true} , 
-    studentID: { type: String, required: true , unique: true} ,
+    PRN: { type: String, } , 
+    studentID: { type: String, unique: true} ,
 
-    email: { type: String, unique: true , required: true },
-    password: { type: String,  required: true },
+    email: { type: String, unique: true , },
+    password: { type: String,  },
 
     branch: {
         type: String,
@@ -24,14 +24,43 @@ const studentSchema = new mongoose.Schema({
         enum : [ "SE", "TE", "BE"],
     },
 
-    //uncomment required:true field when cloudinary is implemented in the project
 
     // Store both Cloudinary URL and publicId for deletion
     studentPhoto: {
         url: { type: String },       // Cloudinary secure URL
         publicId: { type: String },  // Cloudinary public_id
-        // required: true,          // uncomment if photo is mandatory
-    }
+    },
+
+    dob: Date,
+
+    bloodGroup: {
+        type: String,
+        enum: ["A", "A+", "A-", "B", "B+", "B-", "AB+", "AB-", "O", "O+", "O-"],
+
+    },
+
+    currentAddress: {
+        street : String , 
+        city : { type : String, } , 
+        pincode : String 
+    },
+
+    nativeAddress: {
+        street : String , 
+        city : { type : String, } , 
+        pincode : String 
+    },
+
+    //add more categories later on after asking sir
+    category: {
+        type: String,
+        enum : ["Open", "EWS", "EBC", "OBC", "SC", "ST", "Other"],
+    },
+    
+
+    mobileNo : { type: String, } , 
+    parentMobileNo : { type: String, } ,
+
 
 }, 
 { timestamps: true });
