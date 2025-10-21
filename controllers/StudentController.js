@@ -125,9 +125,83 @@ const importExcelDataWithPasswords = async (req, res) => {
 };
 
 
-// Add remaining Details from schema
+// Add remaining Details from schema --for student
 const addStudentDetails = async (req,res)=>{
-	
+	try {
+		const studentId = req.user.id;
+
+		const student = await Student.findById(studentId);
+		if (!student) {
+			return res.status(404).json({ success: false, message: "Student not found" });
+		}
+		
+
+		// Destructure fields from request body
+		const {firstName, middleName, lastName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, currentState, nativeStreet, nativeCity, nativeState, category, mobileNo, parentMobileNo } = req.body;
+
+		// Basic required field check
+		if (!firstName || !middleName || !lastName || !PRN || !branch || !year || !dob || !bloodGroup || !currentStreet || !currentCity || !currentState || !nativeStreet || !nativeCity || !nativeState || !category || !mobileNo || !parentMobileNo) {
+			return res.status(400).json({ success: false, message: "All fields are required" });
+		}
+
+
+		if(!req.file){
+			return res.status(400).json({ success: false, message: "Student Photo required" });
+		}
+
+		let studentPhoto = null;
+        if (req.file) {
+            const uploaded = await uploadToCloudinary(req.file.path);
+            studentPhoto = {
+                url: uploaded.url,
+                publicId: uploaded.publicId
+            };
+        }
+
+		//Build nested object for name
+		const name = {
+			firstName,
+			middleName,
+			lastName
+		}
+
+		// Build nested objects for addresses
+		const currentAddress = {
+			street: currentStreet,
+			city: currentCity,
+			state: currentState
+		};
+
+		const nativeAddress = {
+			street: nativeStreet,
+			city: nativeCity,
+			state: nativeState
+		};
+
+		// Update the existing student
+		const studentWithAddedDetails = await Student.findByIdAndUpdate(
+			studentId,
+			{
+				name,
+				PRN,
+				branch,
+				year,
+				dob,
+				bloodGroup,
+				currentAddress,
+				nativeAddress,
+				category,
+				mobileNo,
+				parentMobileNo,
+				studentPhoto
+			},
+			{ new: true } // Return the updated document
+		);
+		res.status(201).json({ success: true, data: studentWithAddedDetails, message: "Added details successfully!" });
+	} catch (err) {
+		console.error("Error in createPersonalDetail:", err);
+		res.status(500).json({ success: false, message: "Internal Server Error" });
+	}
 };
 
 // search filter and pagination
@@ -243,38 +317,96 @@ const updateStudent = async (req, res) => {
 		const { studentId } = req.params;
 		const userId = req.user.id;
 
+		const student = await Student.findById(studentId);
+
+		if (!student) {
+			return res.status(404).json({ success: false, message: "Student not found" });
+		}
+
 		// Verify requester
 		if (req.user.role === "admin") {
-		const adminExists = await Admin.findById(userId);
-		if (!adminExists) {
-			return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-		}
+			const adminExists = await Admin.findById(userId);
+			if (!adminExists) {
+				return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
+			}
 		} else if (req.user.role === "student") {
-		if (userId !== studentId) {
-			return res.status(403).json({ success: false, message: "Unauthorized access" });
-		}
+
+			if(student._id.toString() !== userId.toString()){
+				return res.status(403).json({ success: false, message: "Resource does not belong to logged in student" });
+			}
+			
+
+		}else{
+			return res.status(400).json({success:false, message: "Bad Request"});
 		}
 
-		const student = await Student.findById(studentId);
-		if (!student) {
-		return res.status(404).json({ success: false, message: "Student not found" });
+		const {firstName, middleName, lastName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, currentState, nativeStreet, nativeCity, nativeState, category, mobileNo, parentMobileNo } = req.body;
+
+		//Build nested object for name
+		const name = {
+			firstName,
+			middleName,
+			lastName
 		}
 
-		const { name, email, branch, year, password } = req.body;
-		const updatedData = { name, email, branch, year };
-		if (password) updatedData.password = password;
+		// Build nested objects for addresses
+		const currentAddress = {
+			street: currentStreet,
+			city: currentCity,
+			state: currentState
+		};
+
+		const nativeAddress = {
+			street: nativeStreet,
+			city: nativeCity,
+			state: nativeState
+		};
+
+
+		const updatedData = { name, PRN, branch, year, dob, bloodGroup, currentAddress, nativeAddress, category, mobileNo, parentMobileNo};
+
+		//remove duplicate or empty fields
+		Object.keys(name).forEach(key => name[key] === undefined && delete name[key]);
+		Object.keys(currentAddress).forEach(key => currentAddress[key] === undefined && delete currentAddress[key]);
+		Object.keys(nativeAddress).forEach(key => nativeAddress[key] === undefined && delete nativeAddress[key]);
+
+		Object.keys(updatedData).forEach(
+			key => updatedData[key] === undefined && delete updatedData[key]
+		);
+
+		// only send unempty data in the object
+		if (Object.keys(name).length) updatedData.name = name;
+		if (Object.keys(currentAddress).length) updatedData.currentAddress = currentAddress;
+		if (Object.keys(nativeAddress).length) updatedData.nativeAddress = nativeAddress;
+
+		
 
 		// Handle student photo upload
-		const photoFile = req.files?.studentPhoto?.[0];
+		const photoFile = req.file;
 		if (photoFile) {
-		if (student.studentPhoto?.publicId) {
-			await cloudinary.uploader.destroy(student.studentPhoto.publicId);
-		}
-		const result = await uploadToCloudinary(photoFile.path);
-		updatedData.studentPhoto = { url: result.url, publicId: result.publicId };
+
+			const oldPublicId=student.studentPhoto.publicId
+
+			const result = await uploadToCloudinary(photoFile.path); 
+
+			if(result.ok){
+				
+				updatedData.studentPhoto = { url: result.url, publicId: result.publicId };
+				const updatedStudent = await Student.findByIdAndUpdate(studentId, { $set: updatedData }, { new: true, runValidators: true });
+
+				if(updatedStudent){
+					const result = await cloudinary.uploader.destroy(oldPublicId);
+				}else{
+					//do something
+				}
+			}else{
+				//do something
+			}
+			
+			
 		}
 
-		const updatedStudent = await Student.findByIdAndUpdate(studentId, { $set: updatedData }, { new: true, runValidators: true });
+		
 
 		res.status(200).json({ success: true, message: "Student updated successfully", data: updatedStudent });
 	} catch (err) {
