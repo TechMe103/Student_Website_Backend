@@ -48,7 +48,7 @@ const studentSchema = new mongoose.Schema({
     nativeAddress: {
         street : String , 
         city : { type : String, } , 
-        pincode : String 
+        nativePincode : String 
     },
 
     //add more categories later on after asking sir
