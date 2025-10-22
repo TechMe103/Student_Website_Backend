@@ -49,8 +49,9 @@ const getAchievementByStu = async (req, res) => {
   try {
     const achievements = await Achievement.find({ stuID: req.params.stuID }).populate(
       "stuID",
-      "name roll branch"
-    );
+      "name roll branch year"
+    ).sort({ createdAt: -1 });
+
     res.status(200).json({ success: true, data: achievements });
   } catch (err) {
     console.error("Error fetching achievements:", err);
@@ -83,8 +84,14 @@ const updateAchievement = async (req, res) => {
       achievement.photographs.certificate = { url: newCertificate.url, publicId: newCertificate.publicId };
     }
 
-    // Update other fields
-    Object.assign(achievement, req.body);
+    // // Update other fields
+    // Object.assign(achievement, req.body);
+
+    // Whitelist fields to update
+    const allowedFields = ["title", "description", "issuedBy", "category", "achievementType", "teamMembers", "date"];
+    allowedFields.forEach(field => {
+      if (req.body[field] !== undefined) achievement[field] = req.body[field];
+    });
 
     await achievement.save();
     res.status(200).json({ success: true, achievement });
@@ -121,6 +128,10 @@ const deleteAchievement = async (req, res) => {
 // GET all achievements (Admin)
 const getAllAchievements = async (req, res) => {
   try {
+
+    if (!req.user.isAdmin)
+      return res.status(403).json({ success: false, message: "Access denied" });
+
     const achievements = await Achievement.find()
       .populate("stuID", "name branch year")
       .sort({ createdAt: -1 });

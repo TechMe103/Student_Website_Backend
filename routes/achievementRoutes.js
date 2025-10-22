@@ -23,7 +23,7 @@ router.post(
 );
 
 // Get achievements by student ID
-router.get("/:stuID", verifyToken, getAchievementByStu);
+router.get("/student/:stuID", verifyToken, getAchievementByStu);
 
 // Update achievement (accept new files)
 router.put(
@@ -40,6 +40,9 @@ router.put(
 router.delete("/:id", verifyToken, deleteAchievement);
 
 // Get all achievements (admin)
-router.get("/", verifyToken, getAllAchievements);
+router.get("/all", verifyToken, getAllAchievements);
 
 module.exports = router;
+
+
+

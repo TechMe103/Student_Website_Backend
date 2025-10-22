@@ -24,7 +24,7 @@ const achievementSchema = new mongoose.Schema(
       enum: ["Participation", "Winner", "Runner-up"],
       required: true,
     },
-    teamMembers: [{ type: String }],
+    teamMembers: { type: [String], default: [] },
     photographs: {
       eventPhoto: {
         url: { type: String, required: true },
