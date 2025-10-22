@@ -15,7 +15,7 @@ const higherStudiesSchema = new mongoose.Schema({
 	},
 
 	score: {
-		type: Number,
+		type: String,
 		required: true,
 	},
 
