@@ -13,6 +13,8 @@ const nodemailer = require("nodemailer");
 
 require("dotenv").config();
 
+const { importExcelSchema, addStudentDetailsSchema, updateStudentSchema} = require("../validators/studentValidation")
+
 // Configure your email transporter (example with Gmail)
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -75,36 +77,52 @@ const importExcelDataWithPasswords = async (req, res) => {
 		let failedStudents = [];
 
 		for (const data of filteredData) {
-		try {
-			const randomPassword = generateRandomPassword(14);
-			const hashedPassword = await bcrypt.hash(randomPassword, 10);
+			try {
+				const randomPassword = generateRandomPassword(14);
+				const hashedPassword = await bcrypt.hash(randomPassword, 10);
 
-			const newStudent = new Student({
-			studentID: data.studentID,
-			email: data.email,
-			password: hashedPassword,
-			});
+				// Validate current student object
+				const { error, value } = importExcelSchema.validate(data, { abortEarly: false });
+				if (error) {
+					const validationErrors = error.details.map(err => ({
+						field: err.path[0],
+						message: err.message
+					}));
+					
+					failedStudents.push({
+						studentID: data.studentID,
+						email: data.email,
+						error: validationErrors
+					});
+					continue; // Skip this student, continue with next
+				}
 
-			const savedStudent = await newStudent.save();
+				const newStudent = new Student({
+					studentID: data.studentID.trim(),
+					email: data.email.trim(),
+					password: hashedPassword,
+				});
 
-			// Only send email if saved successfully
-			const mailOptions = {
-			from: process.env.emailUser,
-			to: data.email,
-			subject: "Your Account Password",
-			text: `Hello ${data.studentID},\n\nYour new password is: ${randomPassword}\n\nPlease change it after your first login.`,
-			};
+				const savedStudent = await newStudent.save();
 
-			await transporter.sendMail(mailOptions);
-			successCount++;
-		} catch (err) {
-			console.error(`❌ Failed for ${data.studentID}:`, err.message);
-			failedStudents.push({
-			studentID: data.studentID,
-			email: data.email,
-			error: err.message,
-			});
-		}
+				// Only send email if saved successfully
+				const mailOptions = {
+				from: process.env.emailUser,
+				to: data.email,
+				subject: "Your Account Password",
+				text: `Hello ${data.studentID},\n\nYour new password is: ${randomPassword}\n`,
+				};
+
+				await transporter.sendMail(mailOptions);
+				successCount++;
+			} catch (err) {
+				console.error(`❌ Failed for ${data.studentID}:`, err.message);
+				failedStudents.push({
+				studentID: data.studentID,
+				email: data.email,
+				error: err.message,
+				});
+			}
 		}
 
 		// 5️⃣ Delete uploaded file
@@ -127,8 +145,12 @@ const importExcelDataWithPasswords = async (req, res) => {
 
 // Add remaining Details from schema --for student
 const addStudentDetails = async (req,res)=>{
+	
+	let dbSaved=false;	//flag to track if save to Db oprations succeeds or fails
+
 	try {
 		const studentId = req.user.id;
+
 
 		const student = await Student.findById(studentId);
 		if (!student) {
@@ -139,6 +161,7 @@ const addStudentDetails = async (req,res)=>{
 		// Destructure fields from request body
 		const {firstName, middleName, lastName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, pincode, nativeStreet, nativeCity, nativePincode, category, mobileNo, parentMobileNo } = req.body;
 
+
 		// Basic required field check
 		if (!firstName || !middleName || !lastName || !PRN || !branch || !year || !dob || !bloodGroup || !currentStreet || !currentCity || !pincode || !nativeStreet || !nativeCity || !nativePincode || !category || !mobileNo || !parentMobileNo) {
 			return res.status(400).json({ success: false, message: "All fields are required" });
@@ -148,6 +171,24 @@ const addStudentDetails = async (req,res)=>{
 		if(!req.file){
 			return res.status(400).json({ success: false, message: "Student Photo required" });
 		}
+
+		// Validate input using Joi
+		const { error, value } = addStudentDetailsSchema.validate(req.body, { abortEarly: false });
+		if (error) {
+			const validationErrors = error.details.map(err => ({
+				field: err.path[0],
+				message: err.message
+			}));
+
+			return res.status(400).json({
+				success: false,
+				message: "Validation failed",
+				errors: validationErrors
+			});
+		}
+
+		// Convert dob string to Date before saving
+		const dobDate = new Date(value.dob);
 
 		let studentPhoto = null;
         if (req.file) {
@@ -183,19 +224,18 @@ const addStudentDetails = async (req,res)=>{
 
 		// Update the existing student
 		const studentWithAddedDetails = await Student.findByIdAndUpdate(
-			studentId, { name, PRN, branch, year, dob, bloodGroup, currentAddress, nativeAddress, category, mobileNo, parentMobileNo, studentPhoto},{ new: true } // Return the updated document
+			studentId, { name, PRN, branch, year, dobDate, bloodGroup, currentAddress, nativeAddress, category, mobileNo, parentMobileNo, studentPhoto},{ new: true } // Return the updated document
 		);
-
-		//Db update failed, then delete photo uploaded to cloudinary
-		if(!studentWithAddedDetails){
-			const delResult=await cloudinary.uploader.destroy(uploadResult.publicId);
-			console.log(delResult);
-			return res.status(500).json({ success: false, message: "Couldnt save the data, Please try again later." });
-		}
+		dbSaved=true;
 
 		res.status(201).json({ success: true, data: studentWithAddedDetails, message: "Added details successfully!" });
 	} catch (err) {
 		console.error("Error in createPersonalDetail:", err);
+
+		// if Db update failed, then delete photo uploaded to cloudinary
+		if(!dbSaved){
+			await cloudinary.uploader.destroy(uploadResult.publicId);
+		}
 		res.status(500).json({ success: false, message: "Internal Server Error" });
 	}
 };
@@ -317,6 +357,8 @@ const getStudentById= async (req,res)=>{
 
 // ==================== UPDATE STUDENT ====================
 const updateStudent = async (req, res) => {
+	let dbSaved=false;
+	let uploadResult=null;
 	try {
 		const { studentId } = req.params;
 		const userId = req.user.id;
@@ -355,6 +397,25 @@ const updateStudent = async (req, res) => {
 
 
 		const {firstName, middleName, lastName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, pincode, nativeStreet, nativeCity, nativePincode, category, mobileNo, parentMobileNo } = req.body;
+
+
+		// Validate input using Joi
+		const { error, value } = updateStudentSchema.validate(req.body, { abortEarly: false });
+		if (error) {
+			const validationErrors = error.details.map(err => ({
+				field: err.path[0],
+				message: err.message
+			}));
+
+			return res.status(400).json({
+				success: false,
+				message: "Validation failed",
+				errors: validationErrors
+			});
+		}
+
+		// Convert dob string to Date before saving
+		const dobDate = new Date(value.dob);
 		
 		const updatedData = {};
 
@@ -385,11 +446,15 @@ const updateStudent = async (req, res) => {
 
 		// Handle student photo upload
 		const photoFile = req.file;
-		let uploadResult=null;
+		
 		if (photoFile) {
 
 			// Upload new photo
 			uploadResult = await uploadToCloudinary(photoFile.path);
+
+			if(!uploadResult){
+				return res.status(500).json({success:false, message:"Failed to upload details. please try again later"});
+			}
 
 
 			// Set uploaded photo in updatedData
@@ -400,14 +465,10 @@ const updateStudent = async (req, res) => {
 		const updatedStudent = await Student.findByIdAndUpdate(
 			studentId,
 			{ $set: updatedData },
-			{ new: true, runValidators: true }
+			{ new: true, runValidators: true, select: "-password" }
 		);
+		dbSaved=true;
 
-		if (!updatedStudent && uploadResult !== null) {
-			// Rollback: delete newly uploaded photo
-			await cloudinary.uploader.destroy(uploadResult.publicId);
-			return res.status(500).json({ success: false, message: "DB update failed, photo rollback done" });
-		}
 
 		//if DB update succeeds then delete old photo from cloudinary
 		try {
@@ -419,6 +480,9 @@ const updateStudent = async (req, res) => {
 		res.status(200).json({ success: true, message: "Student updated successfully", data: updatedStudent });
 	} catch (err) {
 		console.error("Error in updateStudent:", err);
+		if(!dbSaved && uploadResult.publicId){
+			await cloudinary.uploader.destroy(uploadResult.publicId);
+		}
 		res.status(500).json({ success: false, message: "Internal Server Error" });
 	}
 };

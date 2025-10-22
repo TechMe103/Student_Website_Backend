@@ -4,8 +4,26 @@ const  {uploadToCloudinary}=require("../helpers/UploadToCloudinary");
 const Admin = require("../models/Admin");
 const cloudinary = require("../config/cloudinaryConfig");
 
+// small helper function to make upload of two files atomic operation
+const uploadInternshipFiles = async (reportPath, proofPath) => {
+    const reportResult = await uploadToCloudinary(reportPath);
+    try {
+        const proofResult = await uploadToCloudinary(proofPath);
+        return { reportResult, proofResult };
+    } catch (err) {
+        // rollback first upload immediately
+        await cloudinary.uploader.destroy(reportResult.publicId);
+        throw err;
+    }
+};
+
+
 
 const createInternship = async (req, res) => {
+
+    let reportResult, proofResult;
+    let dbSaved=false; //flag to track if save to Db oprations succeeds or fails
+
     try {
         const { id } = req.user;
 
@@ -38,10 +56,9 @@ const createInternship = async (req, res) => {
         if (!internshipReport || !photoProof) {
             return res.status(400).json({ success: false, message: "Both internship report and photo proof are required" });
         }
+        
 
-        // Upload files to Cloudinary and get both URL and publicId
-        const reportResult = await uploadToCloudinary(internshipReport.path);
-        const proofResult = await uploadToCloudinary(photoProof.path);
+        ({ reportResult, proofResult } = await uploadInternshipFiles(internshipReport.path, photoProof.path));
 
         // Create Internship
         const internship = new Internship({
@@ -63,27 +80,18 @@ const createInternship = async (req, res) => {
             }
         });
 
-        await internship.save();
+        const saveResult = await internship.save();
+        dbSaved=true;   //set flag if DB save is sucessful
+
         res.status(201).json({ success: true, internship });
 
     } catch (err) {
         console.error("Error in createInternship controller: ", err);
 
-        // 🧹 Cleanup Cloudinary if files were uploaded but save failed
-        if (req.files) {
-            const uploadedFiles = [];
-            if (req.files.internshipReport?.[0]) uploadedFiles.push(req.files.internshipReport[0]);
-            if (req.files.photoProof?.[0]) uploadedFiles.push(req.files.photoProof[0]);
-            for (const file of uploadedFiles) {
-                try {
-                    const uploadRes = await uploadToCloudinary(file.path);
-                    if (uploadRes?.publicId) {
-                        await cloudinary.uploader.destroy(uploadRes.publicId);
-                    }
-                } catch (cleanupErr) {
-                    console.error("Failed to cleanup Cloudinary file:", cleanupErr);
-                }
-            }
+        // if save to DB operation fails, then files stored in cloudinary must be deleted, as files are useless now
+        if (!dbSaved) {
+            if (reportResult?.publicId) await cloudinary.uploader.destroy(reportResult.publicId);
+            if (proofResult?.publicId) await cloudinary.uploader.destroy(proofResult.publicId);
         }
         res.status(500).json({ success: false, message: "Internal Server Error. Please Try Again Later" });
     }
@@ -248,16 +256,16 @@ const updateInternship = async (req, res) => {
         // Authorization checks (already perfect in your version)
         if (req.user.role === "admin") {
         const adminExists = await Admin.findById(userId);
-        if (!adminExists) {
-            return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-        }
+            if (!adminExists) {
+                return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
+            }
         }
 
         if (req.user.role === "student") {
         const student = await Student.findById(userId);
-        if (!student) {
-            return res.status(404).json({ success: false, message: "Student not found" });
-        }
+            if (!student) {
+                return res.status(404).json({ success: false, message: "Student not found" });
+            }
         }
 
         const { internshipId } = req.params;

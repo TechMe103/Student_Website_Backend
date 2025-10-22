@@ -25,16 +25,16 @@ exports.signup = async (req, res) => {
         // Validate input using Joi
         const { error } = signupSchema.validate(req.body, { abortEarly: false });
         if (error) {
-        const validationErrors = error.details.map(err => ({
-            field: err.path[0],
-            message: err.message
-        }));
+            const validationErrors = error.details.map(err => ({
+                field: err.path[0],
+                message: err.message
+            }));
 
-        return res.status(400).json({
-            success: false,
-            message: "Validation failed",
-            errors: validationErrors
-        });
+            return res.status(400).json({
+                success: false,
+                message: "Validation failed",
+                errors: validationErrors
+            });
         }
 
         // Check if Student exists

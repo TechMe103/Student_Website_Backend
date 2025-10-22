@@ -8,7 +8,7 @@ const verifyToken =require ("../middlewares/VerifyToken");
 const upload=require("../middlewares/multer");
 
 
-//route => internship
+// create internship
 router.post("/" , 
     verifyToken , 
     upload.fields([

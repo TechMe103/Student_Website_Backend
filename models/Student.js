@@ -8,7 +8,7 @@ const studentSchema = new mongoose.Schema({
         lastName : { type : String , } ,
     },
 
-    PRN: { type: String, } , 
+    PRN: { type: String, unique: true } , 
     studentID: { type: String, unique: true} ,
 
     email: { type: String, unique: true , },
@@ -35,7 +35,7 @@ const studentSchema = new mongoose.Schema({
 
     bloodGroup: {
         type: String,
-        enum: ["A", "A+", "A-", "B", "B+", "B-", "AB+", "AB-", "O", "O+", "O-"],
+        enum: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
 
     },
 

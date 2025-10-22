@@ -1,5 +1,5 @@
 const dotenv=require("dotenv");
-const fs= require("fs");
+const fs = require("fs").promises;
 
 dotenv.config();
 
@@ -25,13 +25,12 @@ const uploadToCloudinary = async (localFilePath) =>{
        console.error( "Failed to upload file to cloudinary: " ,error);
        throw error;
     } finally{
-        fs.unlink(localFilePath, (err) => {
-            if (err) {
-                console.error("Failed to delete temp file:", err);
-            } else {
-                console.log("Temp file deleted:", localFilePath);
-            }
-        });
+        try {
+            await fs.unlink(localFilePath); 
+            console.log("Temp file deleted:", localFilePath);
+        } catch (err) {
+            console.error("Failed to delete temp file:", err);
+        }
     }
 }
 
