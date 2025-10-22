@@ -4,14 +4,20 @@ const Admin = require("../models/Admin");
 const cloudinary = require("../config/cloudinaryConfig");
 const { uploadToCloudinary } = require("../helpers/UploadToCloudinary");
 
-// --------------------------- CREATE PLACEMENT --------------------------- //
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_REPORT_TYPE = "application/pdf";
+
+// --------------------------- CREATE PLACEMENT (student) --------------------------- //
 const createPlacement = async (req, res) => {
+
+	let dbSaved=false;
+	let uploadResult=null;
 	try {
-		const { id } = req.user; // Logged-in student ID
+		const { id } = req.user; 
 
 		const student = await Student.findById(id);
 		if (!student) {
-		return res.status(404).json({ success: false, message: "Student not found" });
+			return res.status(404).json({ success: false, message: "Student not found" });
 		}
 
 		const { companyName, role, placementType } = req.body;
@@ -24,10 +30,18 @@ const createPlacement = async (req, res) => {
 		// Upload proof file to Cloudinary
 		const placementProofFile = req.file;
 		if (!placementProofFile) {
-		return res.status(400).json({ success: false, message: "Placement proof is required" });
+			return res.status(400).json({ success: false, message: "Placement proof is required" });
 		}
 
-		const uploadResult = await uploadToCloudinary(placementProofFile.path);
+		if (placementProofFile.mimetype !== ALLOWED_REPORT_TYPE){
+            return res.status(400).json({ success: false, message: "Placement Proof must be a PDF" });
+        }
+
+        if (placementProofFile.size > MAX_FILE_SIZE){
+            return res.status(400).json({ success: false, message: "Placement Proof exceeds 5MB" });
+        }
+
+		uploadResult = await uploadToCloudinary(placementProofFile.path);
 
 		// Create Placement record
 		const placement = new Placement({
@@ -42,11 +56,16 @@ const createPlacement = async (req, res) => {
 		});
 
 		await placement.save();
+		dbSaved=true;
 
 		res.status(201).json({ success: true, message: "Placement added successfully", placement });
 	} catch (err) {
 		console.error("Error in createPlacement:", err);
-		res.status(500).json({ success: false, message: "Internal Server Error" });
+		// if save to DB operation fails, then files stored in cloudinary must be deleted, as files are useless now
+		if (!dbSaved && uploadResult) {
+			if (uploadResult.publicId) await cloudinary.uploader.destroy(uploadResult.publicId);
+		}
+		return res.status(500).json({ success: false, message: "Internal Server Error" });
 	}
 };
 
@@ -102,7 +121,7 @@ const updatePlacement = async (req, res) => {
 		res.status(200).json({ success: true, message: "Placement updated successfully", data: updatedPlacement });
 	} catch (err) {
 		console.error("Error in updatePlacement:", err);
-		res.status(500).json({ success: false, message: "Internal Server Error" });
+		return res.status(500).json({ success: false, message: "Internal Server Error" });
 	}
 };
 
@@ -136,7 +155,7 @@ const deletePlacement = async (req, res) => {
 		res.status(200).json({ success: true, message: "Placement deleted successfully" });
 	} catch (err) {
 		console.error("Error in deletePlacement:", err);
-		res.status(500).json({ success: false, message: "Internal Server Error" });
+		return res.status(500).json({ success: false, message: "Internal Server Error" });
 	}
 };
 
@@ -157,7 +176,7 @@ const getAllPlacements = async (req, res) => {
 		res.status(200).json({ success: true, data: placements });
 	} catch (err) {
 		console.error("Error in getAllPlacements:", err);
-		res.status(500).json({ success: false, message: "Server Error" });
+		return res.status(500).json({ success: false, message: "Server Error" });
 	}
 };
 
@@ -175,7 +194,7 @@ const getOwnPlacements = async (req, res) => {
 		res.status(200).json({ success: true, data: placements });
 	} catch (err) {
 		console.error("Error in getOwnPlacements:", err);
-		res.status(500).json({ success: false, message: "Server Error" });
+		return res.status(500).json({ success: false, message: "Server Error" });
 	}
 };
 
@@ -202,7 +221,7 @@ const getStudentPlacementsByAdmin = async (req, res) => {
 		res.status(200).json({ success: true, data: placements });
 	} catch (err) {
 		console.error("Error in getStudentPlacementsByAdmin:", err);
-		res.status(500).json({ success: false, message: "Server Error" });
+		return res.status(500).json({ success: false, message: "Server Error" });
 	}
 };
 
@@ -240,7 +259,7 @@ const getSinglePlacement = async (req, res) => {
 		res.status(200).json({ success: true, data: placement });
 	} catch (err) {
 		console.error("Error in getSinglePlacement:", err);
-		res.status(500).json({ success: false, message: "Server Error" });
+		return res.status(500).json({ success: false, message: "Server Error" });
 	}
 };
 

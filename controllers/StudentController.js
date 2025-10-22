@@ -148,6 +148,8 @@ const addStudentDetails = async (req,res)=>{
 	
 	let dbSaved=false;	//flag to track if save to Db oprations succeeds or fails
 
+	let uploadResult=null;
+
 	try {
 		const studentId = req.user.id;
 
@@ -172,8 +174,10 @@ const addStudentDetails = async (req,res)=>{
 			return res.status(400).json({ success: false, message: "Student Photo required" });
 		}
 
+		
+
 		// Validate input using Joi
-		const { error, value } = addStudentDetailsSchema.validate(req.body, { abortEarly: false });
+		const { error, value } = addStudentDetailsSchema.validate({firstName, middleName, lastName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, pincode, nativeStreet, nativeCity, nativePincode, category, mobileNo, parentMobileNo }, { abortEarly: false });
 		if (error) {
 			const validationErrors = error.details.map(err => ({
 				field: err.path[0],
@@ -188,11 +192,13 @@ const addStudentDetails = async (req,res)=>{
 		}
 
 		// Convert dob string to Date before saving
-		const dobDate = new Date(value.dob);
+		const dobDate = new Date(dob);
+
+		
 
 		let studentPhoto = null;
         if (req.file) {
-            const uploadResult = await uploadToCloudinary(req.file.path);
+            uploadResult = await uploadToCloudinary(req.file.path);
 			if(!uploadResult){
 				return res.status(500).json({success:false, message: "Photo upload failed, Please try again later"});
 			}
@@ -224,7 +230,7 @@ const addStudentDetails = async (req,res)=>{
 
 		// Update the existing student
 		const studentWithAddedDetails = await Student.findByIdAndUpdate(
-			studentId, { name, PRN, branch, year, dobDate, bloodGroup, currentAddress, nativeAddress, category, mobileNo, parentMobileNo, studentPhoto},{ new: true } // Return the updated document
+			studentId, { name, PRN, branch, year, dob : dobDate, bloodGroup, currentAddress, nativeAddress, category, mobileNo, parentMobileNo, studentPhoto},{ new: true } // Return the updated document
 		);
 		dbSaved=true;
 
@@ -400,7 +406,7 @@ const updateStudent = async (req, res) => {
 
 
 		// Validate input using Joi
-		const { error, value } = updateStudentSchema.validate(req.body, { abortEarly: false });
+		const { error, value } = updateStudentSchema.validate({firstName, middleName, lastName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, pincode, nativeStreet, nativeCity, nativePincode, category, mobileNo, parentMobileNo }, { abortEarly: false });
 		if (error) {
 			const validationErrors = error.details.map(err => ({
 				field: err.path[0],
