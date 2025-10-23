@@ -3,7 +3,7 @@ const Student = require("../models/Student");
 const Admin = require("../models/Admin");
 const cloudinary = require("../config/cloudinaryConfig");
 const { uploadToCloudinary } = require("../helpers/UploadToCloudinary");
-const { createHigherStudySchema, updateHigherStudySchema } = require("../validators/higherStudiesValidation")
+const { createHigherStudySchema, updateHigherStudySchema, getHigherStudiesValidation } = require("../validators/higherStudiesValidation")
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_FILE_TYPE = "application/pdf";
@@ -187,32 +187,124 @@ const deleteHigherStudy = async (req, res) => {
     }
 };
 
-module.exports = {
-    createHigherStudy,
-    updateHigherStudy,
-    deleteHigherStudy
-};
 
 
-// Get all higher studies (admin only, populate student fields)
-const getAllHigherStudies = async (req, res) => {
-	try {
-		const adminId=req.user.id;
+const getHigherStudies = async (req, res) => {
+  try {
+    const adminId = req.user.id;
 
-		const admin = await Admin.findById(adminId);
-		if (!admin) {
-			return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-		}
+    // Verify admin
+    const adminExists = await Admin.exists({ _id: adminId });
+    if (!adminExists) {
+      return res.status(403).json({ success: false, message: "Unauthorized" });
+    }
 
-		const studies = await HigherStudies.find()
-		.populate({ path: "stuID", select: "name branch year" })
-		.sort({ createdAt: -1 });
+    // Get query params
+    const { year, search, page, limit } = req.query;
 
-		res.status(200).json({ success: true, data: studies });
-	} catch (err) {
-		console.error("Error in getAllHigherStudies:", err);
-		res.status(500).json({ success: false, message: "Server Error" });
-	}
+    // Validate input
+    const { error, value } = getHigherStudiesValidation.validate(
+      { year, search, page, limit },
+      { abortEarly: false }
+    );
+
+    if (error) {
+      const validationErrors = error.details.map(err => ({
+        field: err.path[0],
+        message: err.message,
+      }));
+      return res
+        .status(400)
+        .json({ success: false, message: "Validation failed", errors: validationErrors });
+    }
+
+    const pageNum = value.page || 1;
+    const limitNum = Math.min(value.limit || 10, 20);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build aggregation pipeline
+    const pipeline = [];
+
+    // Lookup student details
+    pipeline.push({
+      $lookup: {
+        from: "students",
+        localField: "stuID",
+        foreignField: "_id",
+        as: "student",
+      },
+    });
+
+    // Unwind student array
+    pipeline.push({ $unwind: "$student" });
+
+    // Build match conditions
+    const match = {};
+
+    if (year) {
+      match["student.year"] = year.trim();
+    }
+
+    if (search) {
+      const safeSearch = search.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+      match.$or = [
+        { examName: { $regex: safeSearch, $options: "i" } },
+        { score: { $regex: safeSearch, $options: "i" } },
+        { "student.name.firstName": { $regex: safeSearch, $options: "i" } },
+        { "student.name.middleName": { $regex: safeSearch, $options: "i" } },
+        { "student.name.lastName": { $regex: safeSearch, $options: "i" } },
+      ];
+    }
+
+    if (Object.keys(match).length) {
+      pipeline.push({ $match: match });
+    }
+
+    // Use $facet for pagination + total count
+    const results = await HigherStudies.aggregate([
+      ...pipeline,
+      {
+        $facet: {
+          data: [
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: limitNum },
+            {
+              $project: {
+                examName: 1,
+                score: 1,
+                marksheet: 1,
+                stuID: "$student._id",
+                studentName: "$student.name",
+                studentYear: "$student.year",
+              },
+            },
+          ],
+          totalCount: [{ $count: "total" }],
+        },
+      },
+    ]);
+
+    const higherStudies = results[0]?.data || [];
+    const total = results[0]?.totalCount[0]?.total || 0;
+
+    return res.json({
+      success: true,
+      data: higherStudies,
+      total,
+      page: pageNum,
+      totalPages: Math.ceil(total / limitNum),
+    });
+  } catch (err) {
+    console.error({
+      level: "error",
+      message: "Error in getHigherStudies controller",
+      error: err.message,
+      stack: err.stack,
+      time: new Date().toISOString(),
+    });
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 };
 
 // Get higher studies by student ID
@@ -273,7 +365,7 @@ module.exports = {
 	createHigherStudy,
 	updateHigherStudy,
 	deleteHigherStudy,
-	getAllHigherStudies,
+	getHigherStudies,
 	getHigherStudiesByStudent,
 	getOwnHigherStudies,
 };

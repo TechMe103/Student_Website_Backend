@@ -18,4 +18,11 @@ const updatePlacementSchema = Joi.object({
 
 });
 
-module.exports = {createPlacementSchema, updatePlacementSchema};
+const getPlacementsValidation = Joi.object({
+  year: Joi.string().valid("SE", "TE", "BE").optional(),
+  search: Joi.string().max(100).optional(),
+  page: Joi.number().integer().min(1).optional(),
+  limit: Joi.number().integer().min(1).max(20).optional()
+});
+
+module.exports = {createPlacementSchema, updatePlacementSchema, getPlacementsValidation};

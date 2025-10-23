@@ -4,7 +4,7 @@ const {
     createHigherStudy,
     updateHigherStudy,
     deleteHigherStudy,
-    getAllHigherStudies,
+    getHigherStudies,
     getHigherStudiesByStudent,
     getOwnHigherStudies,
 } = require("../controllers/HigherStudiesController");
@@ -26,10 +26,10 @@ router.put("/:higherStudyId", verifyToken, upload.single("marksheet"), updateHig
 router.delete("/:higherStudyId", verifyToken, deleteHigherStudy);
 
 // Get own Higher Studies (Student only)
-router.get("/", verifyToken, getOwnHigherStudies);
+router.get("/me", verifyToken, getOwnHigherStudies);
 
 // Get all Higher Studies (Admin only)
-router.get("/all", verifyToken, getAllHigherStudies);
+router.get("/", verifyToken, getHigherStudies);
 
 // Get Higher Studies by Student ID
 router.get("/:studentId", verifyToken, getHigherStudiesByStudent);

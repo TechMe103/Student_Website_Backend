@@ -4,7 +4,7 @@ const  {uploadToCloudinary}=require("../helpers/UploadToCloudinary");
 const Admin = require("../models/Admin");
 const cloudinary = require("../config/cloudinaryConfig");
 
-const { internshipValidationSchema, updateInternshipValidationSchema } = require("../validators/internshipValidation");
+const { internshipValidationSchema, updateInternshipValidationSchema, getInternshipsValidation } = require("../validators/internshipValidation");
 
 // small helper function to make upload of two files atomic operation
 const uploadInternshipFiles = async (reportPath, proofPath) => {
@@ -135,6 +135,129 @@ const createInternship = async (req, res) => {
     }
 };
 
+// GET INTERNSHIPS (with optional pagination & search + year filter)
+const getInternships = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+
+    // Verify admin
+    const adminExists = await Admin.exists({ _id: adminId });
+    if (!adminExists) {
+      return res.status(403).json({ success: false, message: "Unauthorized" });
+    }
+
+    // Get query params
+    const { year, search, page, limit } = req.query;
+
+    // Validate input
+    const { error, value } = getInternshipsValidation.validate({ year, search, page, limit }, { abortEarly: false });
+    if (error) {
+      const validationErrors = error.details.map(err => ({
+        field: err.path[0],
+        message: err.message
+      }));
+      return res.status(400).json({ success: false, message: "Validation failed", errors: validationErrors });
+    }
+
+    const pageNum = value.page || 1;
+    const limitNum = Math.min(value.limit || 10, 20);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build aggregation pipeline
+    const pipeline = [];
+
+    // Lookup student details
+    pipeline.push({
+      $lookup: {
+        from: "students",
+        localField: "stuID",
+        foreignField: "_id",
+        as: "student"
+      }
+    });
+
+    // Unwind student array
+    pipeline.push({ $unwind: "$student" });
+
+    // Build match conditions
+    const match = {};
+
+    if (year) {
+      match["student.year"] = year.trim();
+    }
+
+    if (search) {
+      const safeSearch = search.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+      match.$or = [
+        { companyName: { $regex: safeSearch, $options: "i" } },
+        { role: { $regex: safeSearch, $options: "i" } },
+        { description: { $regex: safeSearch, $options: "i" } },
+        { "student.name.firstName": { $regex: safeSearch, $options: "i" } },
+        { "student.name.middleName": { $regex: safeSearch, $options: "i" } },
+        { "student.name.lastName": { $regex: safeSearch, $options: "i" } },
+      ];
+    }
+
+    if (Object.keys(match).length) {
+      pipeline.push({ $match: match });
+    }
+
+    // Use $facet for pagination + total count in one query
+    const results = await Internship.aggregate([
+      ...pipeline,
+      {
+        $facet: {
+          data: [
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: limitNum },
+            {
+              $project: {
+                companyName: 1,
+                role: 1,
+                startDate: 1,
+                endDate: 1,
+                durationMonths: 1,
+                stipendInfo: 1,
+                description: 1,
+                internshipReport: 1,
+                photoProof: 1,
+                stuID: "$student._id",
+                studentName: "$student.name",
+                studentYear: "$student.year"
+              }
+            }
+          ],
+          totalCount: [{ $count: "total" }]
+        }
+      }
+    ]);
+
+    const internships = results[0]?.data || [];
+    const total = results[0]?.totalCount[0]?.total || 0;
+
+    return res.json({
+      success: true,
+      data: internships,
+      total,
+      page: pageNum,
+      totalPages: Math.ceil(total / limitNum),
+    });
+
+  } catch (err) {
+    console.error({
+      level: "error",
+      message: "Error in getInternships controller",
+      error: err.message,
+      stack: err.stack,
+      time: new Date().toISOString()
+    });
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+
+
 
 //=> get internship by stu
 const getInternshipByStu = async(req , res) => {
@@ -145,39 +268,6 @@ const getInternshipByStu = async(req , res) => {
         res.status(500).json({ error : err.message });
     }
 };
-
-
-
-//get all internships --for admin 
-const getAllInternships = async (req, res) => {
-    try {
-
-
-        const adminId = req.user.id;
-
-        // Verify admin exists
-        const adminExists = await Admin.findById(adminId);
-        if (!adminExists) {
-            return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-        }
-
-        // Find all internships and populate student details
-        const internships = await Internship.find()
-            .populate({
-                path: "stuID",
-                select: "name branch year"  // only these fields
-            })
-            .sort({ createdAt: -1 }); // newest first
-
-        res.status(200).json({ success: true, data: internships });
-    } catch (error) {
-        console.error("Error in getAllInternships:", error);
-        res.status(500).json({ success: false, message: "Server Error" });
-    }
-};
-
-
-
 
 
 // Get internships by studentId --for student
@@ -510,4 +600,4 @@ const deleteInternship = async (req, res) => {
 };
 
 
-module.exports = { createInternship , getAllInternships  , getOwnInternships , getStudentInternshipsByAdmin , getSingleInternship , updateInternship , deleteInternship };
+module.exports = { createInternship, getInternships , getOwnInternships , getStudentInternshipsByAdmin , getSingleInternship , updateInternship , deleteInternship };
