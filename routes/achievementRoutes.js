@@ -5,10 +5,11 @@ const verifyToken = require("../middlewares/VerifyToken");
 
 const {
   createAchievement,
-  getAchievementByStu,
+  getOwnAchievements,
+  getAllAchievements,
+  getStudentAchievementsByAdmin,
   updateAchievement,
   deleteAchievement,
-  getAllAchievements,
 } = require("../controllers/achievementController");
 
 // Create Achievement (accept 2 files)
@@ -22,8 +23,8 @@ router.post(
   createAchievement
 );
 
-// Get achievements by student ID
-router.get("/student/:stuID", verifyToken, getAchievementByStu);
+router.get("/", verifyToken, getOwnAchievements);
+
 
 // Update achievement (accept new files)
 router.put(
@@ -41,6 +42,7 @@ router.delete("/:id", verifyToken, deleteAchievement);
 
 // Get all achievements (admin)
 router.get("/all", verifyToken, getAllAchievements);
+router.get("/student/:studentId", verifyToken, getStudentAchievementsByAdmin);
 
 module.exports = router;
 

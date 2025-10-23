@@ -2,7 +2,6 @@ const express = require("express");
 const router = express.Router();
 
 const verifyToken = require("../middlewares/VerifyToken"); // verifies token & sets req.user
-const isAdmin = require("../middlewares/isAdmin"); // ensures admin access
 
 const { createAdmission, getAdmissionsByStudent, updateAdmission, deleteAdmission, getAllAdmissions, updateAdmissionStatus, getUnpaidStudents } = require("../controllers/admissionController");
 
