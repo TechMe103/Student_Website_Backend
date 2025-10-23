@@ -9,6 +9,7 @@ const addStudentDetailsSchema = Joi.object({
     firstName: Joi.string().pattern(/^[A-Za-z]+$/).required(),
     middleName: Joi.string().pattern(/^[A-Za-z]+$/).required(),
     lastName: Joi.string().pattern(/^[A-Za-z]+$/).required(),
+    motherName: Joi.string().pattern(/^[A-Za-z]+$/).required(),
 
     PRN: Joi.string().pattern(/^[1-9]\d{14}$/).required(),
     branch: Joi.string().valid("Computer", "IT", "AIDS", "Civil", "Chemical", "Mechanical").required(),
@@ -40,6 +41,7 @@ const updateStudentSchema = Joi.object({
     firstName: Joi.string().pattern(/^[A-Za-z]+$/),
     middleName: Joi.string().pattern(/^[A-Za-z]+$/),
     lastName: Joi.string().pattern(/^[A-Za-z]+$/),
+    motherName: Joi.string().pattern(/^[A-Za-z]+$/),
 
     PRN: Joi.string().pattern(/^[1-9]\d{14}$/),
     branch: Joi.string().valid("Computer", "IT", "AIDS", "Civil", "Chemical", "Mechanical"),
@@ -67,9 +69,17 @@ const updateStudentSchema = Joi.object({
     // studentPhoto will be validated in middleware/controller after upload
 });
 
+const getStudentsValidation = Joi.object({
+    year: Joi.string().valid("SE", "TE", "BE").optional(),
+    search: Joi.string().max(100).optional(),
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(20).optional()
+});
+
 module.exports = {
     importExcelSchema,
     addStudentDetailsSchema,
-    updateStudentSchema
+    updateStudentSchema,
+    getStudentsValidation
 };
 
