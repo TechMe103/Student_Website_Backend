@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { createPlacement, updatePlacement, deletePlacement, getAllPlacements, getOwnPlacements, getStudentPlacementsByAdmin, getSinglePlacement, } = require("../controllers/PlacementController");
+const { createPlacement, updatePlacement, deletePlacement, getPlacements, getOwnPlacements, getStudentPlacementsByAdmin, getSinglePlacement, } = require("../controllers/PlacementController");
 
 const verifyToken =require ("../middlewares/VerifyToken");
 
@@ -29,10 +29,10 @@ router.put(
 router.delete("/:placementId", verifyToken, deletePlacement);
 
 // Get All Placements (Admin only)
-router.get("/all", verifyToken, getAllPlacements);
+router.get("/", verifyToken, getPlacements);
 
 // Get Logged-in Student’s Own Placements
-router.get("/", verifyToken, getOwnPlacements);
+router.get("/me", verifyToken, getOwnPlacements);
 
 // Get Placements of Specific Student (Admin)
 router.get("/student-placement-by-admin/:studentId", verifyToken, getStudentPlacementsByAdmin);

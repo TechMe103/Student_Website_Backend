@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const {addStudentDetails, getStudentById, getStudents, getAllStudents, getSingleStudent, updateStudent, deleteStudent, importExcelDataWithPasswords } = require("../controllers/StudentController");
+const {addStudentDetails, getStudentById, getStudents, getSingleStudent, updateStudent, deleteStudent, importExcelDataWithPasswords } = require("../controllers/StudentController");
 const uploadExcel = require("../middlewares/excelMulter");
 const verifyToken =require ("../middlewares/VerifyToken");
 const upload = require("../middlewares/multer");
@@ -20,9 +20,8 @@ router.put("/:studentId", verifyToken, upload.single("studentPhoto"), trimReques
 router.delete("/:studentId", verifyToken, deleteStudent);
 
 // GET routes
-router.get("/", verifyToken, getStudents);              // optional basic search/pagination
-router.get("/all", verifyToken, getAllStudents);       // Admin only
-router.get("/me", verifyToken, getStudentById);        // Student self
+router.get("/", verifyToken, getStudents);  // Admin onnly --with search, filter and pagination
+router.get("/me", verifyToken, getStudentById); // Student self
 router.get("/:studentId", verifyToken, getSingleStudent); // Admin only
 
 

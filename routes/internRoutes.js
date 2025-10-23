@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { createInternship , getAllInternships, getOwnInternships , updateInternship , deleteInternship, getStudentInternshipsByAdmin, getSingleInternship } = require("../controllers/internController");
+const { createInternship , getInternships, getOwnInternships , updateInternship , deleteInternship, getStudentInternshipsByAdmin, getSingleInternship } = require("../controllers/internController");
 
 const verifyToken =require ("../middlewares/VerifyToken");
 
@@ -19,10 +19,10 @@ router.post("/" ,
 );
 
 //get all internships --admin
-router.get("/all" , verifyToken, getAllInternships);
+router.get("/" , verifyToken, getInternships);
 
 // get all internships of a student --student
-router.get("/",verifyToken, getOwnInternships );
+router.get("/me",verifyToken, getOwnInternships );
 
 // get all internships of a student --admin
 router.get("/student-internship-by-admin/:studentId", verifyToken, getStudentInternshipsByAdmin);

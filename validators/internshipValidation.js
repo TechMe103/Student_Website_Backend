@@ -1,9 +1,9 @@
 const Joi = require("joi");
 
-const internshipSchema = Joi.object({
-    companyName: Joi.string().required(),
+const internshipValidationSchema = Joi.object({
+    companyName: Joi.string().trim().min(2).required(),
 
-    role: Joi.string().required(),
+    role: Joi.string().trim().min(2).required(),
 
     startDate: Joi.date().required(),
 
@@ -11,15 +11,47 @@ const internshipSchema = Joi.object({
 
     durationMonths: Joi.number().integer().min(1).max(6).required(),
 
-    isPaid: Joi.boolean().truthy("true").falsy("false").required(),
+    isPaid: Joi.boolean().required(),
 
     stipend: Joi.when("isPaid", {
         is: true,
-        then: Joi.number().required(),
-        otherwise: Joi.number().allow(null, ""),
+        then: Joi.number().min(1).required(),
+        otherwise: Joi.forbidden()
     }),
 
-    description: Joi.string().required(),
+    description: Joi.string().trim().min(10).required()
 });
 
-module.exports = { internshipSchema };
+
+const updateInternshipValidationSchema = Joi.object({
+    companyName: Joi.string().trim().min(2),
+
+    role: Joi.string().trim().min(2),
+
+    startDate: Joi.date(),
+
+    endDate: Joi.date().greater(Joi.ref("startDate")),
+
+    durationMonths: Joi.number().integer().min(1).max(6),
+
+    isPaid: Joi.boolean(),
+
+    stipend: Joi.when("isPaid", {
+        is: true,
+        then: Joi.number().min(1),
+        otherwise: Joi.forbidden()
+    }),
+
+    description: Joi.string().trim().min(10)
+});
+
+
+const getInternshipsValidation = Joi.object({
+  year: Joi.string().valid("SE", "TE", "BE").optional(),
+  search: Joi.string().max(100).optional(),
+  page: Joi.number().integer().min(1).optional(),
+  limit: Joi.number().integer().min(1).max(20).optional()
+});
+
+
+module.exports = { internshipValidationSchema, updateInternshipValidationSchema, getInternshipsValidation };

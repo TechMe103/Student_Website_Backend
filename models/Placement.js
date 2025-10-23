@@ -24,6 +24,7 @@ const placementSchema = new mongoose.Schema({
 		required: true,
 	},
 
+	//LOI or offer letter or joining letter --pdf
 	placementProof: {
 		url: { type: String, required : true },      // Cloudinary secure URL
 		publicId: { type: String, required : true }, // Cloudinary public_id for deletion

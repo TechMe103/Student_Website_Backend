@@ -13,7 +13,9 @@ const nodemailer = require("nodemailer");
 
 require("dotenv").config();
 
-const { importExcelSchema, addStudentDetailsSchema, updateStudentSchema} = require("../validators/studentValidation")
+const { importExcelSchema, addStudentDetailsSchema, updateStudentSchema, getStudentsValidation} = require("../validators/studentValidation");
+
+const cascadeDeleteStudent = require("../helpers/cascadeDeleteStudent");
 
 // Configure your email transporter (example with Gmail)
 const transporter = nodemailer.createTransport({
@@ -148,6 +150,8 @@ const addStudentDetails = async (req,res)=>{
 	
 	let dbSaved=false;	//flag to track if save to Db oprations succeeds or fails
 
+	let uploadResult=null;
+
 	try {
 		const studentId = req.user.id;
 
@@ -159,11 +163,11 @@ const addStudentDetails = async (req,res)=>{
 		
 
 		// Destructure fields from request body
-		const {firstName, middleName, lastName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, pincode, nativeStreet, nativeCity, nativePincode, category, mobileNo, parentMobileNo } = req.body;
+		const {firstName, middleName, lastName, motherName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, pincode, nativeStreet, nativeCity, nativePincode, category, mobileNo, parentMobileNo } = req.body;
 
 
 		// Basic required field check
-		if (!firstName || !middleName || !lastName || !PRN || !branch || !year || !dob || !bloodGroup || !currentStreet || !currentCity || !pincode || !nativeStreet || !nativeCity || !nativePincode || !category || !mobileNo || !parentMobileNo) {
+		if (!firstName || !middleName || !lastName || !motherName || !PRN || !branch || !year || !dob || !bloodGroup || !currentStreet || !currentCity || !pincode || !nativeStreet || !nativeCity || !nativePincode || !category || !mobileNo || !parentMobileNo) {
 			return res.status(400).json({ success: false, message: "All fields are required" });
 		}
 
@@ -172,8 +176,10 @@ const addStudentDetails = async (req,res)=>{
 			return res.status(400).json({ success: false, message: "Student Photo required" });
 		}
 
+		
+
 		// Validate input using Joi
-		const { error, value } = addStudentDetailsSchema.validate(req.body, { abortEarly: false });
+		const { error, value } = addStudentDetailsSchema.validate({firstName, middleName, lastName, motherName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, pincode, nativeStreet, nativeCity, nativePincode, category, mobileNo, parentMobileNo }, { abortEarly: false });
 		if (error) {
 			const validationErrors = error.details.map(err => ({
 				field: err.path[0],
@@ -188,11 +194,13 @@ const addStudentDetails = async (req,res)=>{
 		}
 
 		// Convert dob string to Date before saving
-		const dobDate = new Date(value.dob);
+		const dobDate = new Date(dob);
+
+		
 
 		let studentPhoto = null;
         if (req.file) {
-            const uploadResult = await uploadToCloudinary(req.file.path);
+            uploadResult = await uploadToCloudinary(req.file.path);
 			if(!uploadResult){
 				return res.status(500).json({success:false, message: "Photo upload failed, Please try again later"});
 			}
@@ -206,7 +214,8 @@ const addStudentDetails = async (req,res)=>{
 		const name = {
 			firstName,
 			middleName,
-			lastName
+			lastName,
+			motherName
 		}
 
 		// Build nested objects for addresses
@@ -224,7 +233,7 @@ const addStudentDetails = async (req,res)=>{
 
 		// Update the existing student
 		const studentWithAddedDetails = await Student.findByIdAndUpdate(
-			studentId, { name, PRN, branch, year, dobDate, bloodGroup, currentAddress, nativeAddress, category, mobileNo, parentMobileNo, studentPhoto},{ new: true } // Return the updated document
+			studentId, { name, PRN, branch, year, dob : dobDate, bloodGroup, currentAddress, nativeAddress, category, mobileNo, parentMobileNo, studentPhoto},{ new: true } // Return the updated document
 		);
 		dbSaved=true;
 
@@ -239,121 +248,6 @@ const addStudentDetails = async (req,res)=>{
 		res.status(500).json({ success: false, message: "Internal Server Error" });
 	}
 };
-
-// search filter and pagination --created basic conntroller for now, will make this more secure and better later on.
-const getStudents = async (req, res) => {
-	try {
-		const adminId = req.user.id;
-
-		// Verify admin exists
-		const adminExists = await Admin.findById(adminId);
-		if (!adminExists) {
-		return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-		}
-
-		// Get query params
-		const { year, search, page, limit=10 } = req.query;
-
-		// Build filter object
-		const filter = {};
-		if (year) filter.year = year;
-		if (search) filter['name.firstName'] = search; // simple exact match for firstName
-
-		// Pagination
-		const skip = (page - 1) * limit;
-
-		// Fetch data
-		const students = await Student.find(filter)
-		.skip(skip)
-		.limit(parseInt(limit))
-		.select('-password'); // do not return password
-
-		// Send response
-		res.json({ success: true, data: students });
-	} catch (err) {
-		console.error(err);
-		res.status(500).json({ success: false, message: 'Server error' });
-	}
-};
-
-
-
-
-
-// ==================== GET ALL STUDENTS (Admin only) ====================
-const getAllStudents = async (req, res) => {
-	try {
-		const adminId = req.user.id;
-
-		// Verify admin exists
-		const adminExists = await Admin.findById(adminId);
-		if (!adminExists) {
-		return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-		}
-
-		const students = await Student.find().sort({ createdAt: -1 });
-		res.status(200).json({ success: true, data: students });
-	} catch (error) {
-		console.error("Error in getAllStudents:", error);
-		res.status(500).json({ success: false, message: "Server Error" });
-	}
-};
-
-// ==================== GET SINGLE STUDENT BY ID (Admin) ====================
-const getSingleStudent = async (req, res) => {
-	try {
-
-		const { studentId } = req.params;
-		if (!studentId) {
-			return res.status(400).json({ success: false, message: "Student ID is required" });
-		}
-
-		const adminId = req.user.id;
-
-		// Verify requester exists
-		if (req.user.role === "admin") {
-		const adminExists = await Admin.findById(adminId);
-		if (!adminExists) {
-			return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-		}
-		} else{
-			return res.status(400).json({ success: false, message: "Bad Request" });
-		}
-
-		const student = await Student.findById(studentId);
-		if (!student) {
-			return res.status(404).json({ success: false, message: "Student not found" });
-		}
-
-		return res.status(200).json({ success: true, data: student });
-	} catch (error) {
-		console.error("Error in getSingleStudent:", error);
-		return res.status(500).json({ success: false, message: "Server Error" });
-	}
-};
-
-// Get single Student from req.user.id ( for student )
-const getStudentById= async (req,res)=>{
-
-	try{
-		const studentId=req.user.id;
-
-		if(!studentId){
-			return res.status(400).json({ success: false, message: "Student ID is required, Please Login first" });
-		}
-
-		const student = await Student.findById(studentId);
-		if (!student) {
-			return res.status(404).json({ success: false, message: "Student not found" });
-		}
-
-		return res.status(200).json({ success: true, data: student });
-	}catch(error){
-		console.error("Error in getStudentById : ", error);
-		return res.status(500).json({success: false, message: "Server Error"});
-	}
-
-}; 
 
 // ==================== UPDATE STUDENT ====================
 const updateStudent = async (req, res) => {
@@ -396,11 +290,11 @@ const updateStudent = async (req, res) => {
 		const oldPublicId = student.studentPhoto.publicId;
 
 
-		const {firstName, middleName, lastName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, pincode, nativeStreet, nativeCity, nativePincode, category, mobileNo, parentMobileNo } = req.body;
+		const {firstName, middleName, lastName, motherName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, pincode, nativeStreet, nativeCity, nativePincode, category, mobileNo, parentMobileNo } = req.body;
 
 
 		// Validate input using Joi
-		const { error, value } = updateStudentSchema.validate(req.body, { abortEarly: false });
+		const { error, value } = updateStudentSchema.validate({firstName, middleName, lastName, motherName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, pincode, nativeStreet, nativeCity, nativePincode, category, mobileNo, parentMobileNo }, { abortEarly: false });
 		if (error) {
 			const validationErrors = error.details.map(err => ({
 				field: err.path[0],
@@ -423,6 +317,7 @@ const updateStudent = async (req, res) => {
 		if (req.body.firstName) updatedData["name.firstName"] = req.body.firstName;
 		if (req.body.middleName) updatedData["name.middleName"] = req.body.middleName;
 		if (req.body.lastName) updatedData["name.lastName"] = req.body.lastName;
+		if (req.body.motherName) updatedData["name.motherName"] = req.body.motherName;
 
 		// Current Address
 		if (req.body.currentStreet) updatedData["currentAddress.street"] = req.body.currentStreet;
@@ -438,7 +333,7 @@ const updateStudent = async (req, res) => {
 		if (req.body.PRN) updatedData.PRN = req.body.PRN;
 		if (req.body.branch) updatedData.branch = req.body.branch;
 		if (req.body.year) updatedData.year = req.body.year;
-		if (req.body.dob) updatedData.dob = req.body.dob;
+		if (req.body.dob) updatedData.dob = dobDate;
 		if (req.body.bloodGroup) updatedData.bloodGroup = req.body.bloodGroup;
 		if (req.body.category) updatedData.category = req.body.category;
 		if (req.body.mobileNo) updatedData.mobileNo = req.body.mobileNo;
@@ -535,6 +430,11 @@ const deleteStudent = async (req, res) => {
 			return res.status(500).json({success:false, message:"Cannot delete student. Please try again later."})
 		}
 
+		// delete other documents in other schemas referencing to this student --only if studdent is first successfully deleted from Student.js
+		if(result){
+			await cascadeDeleteStudent(studentId);
+		}
+
 		res.status(200).json({ success: true, message: "Student deleted successfully" });
 	} catch (err) {
 		console.error("Error in deleteStudent:", err);
@@ -542,4 +442,141 @@ const deleteStudent = async (req, res) => {
 	}
 };
 
-module.exports = {addStudentDetails, getStudentById ,getStudents, getAllStudents, getSingleStudent, updateStudent, deleteStudent, importExcelDataWithPasswords };
+
+// GET STUDENTS (with optional pagination)
+const getStudents = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+
+    // Verify admin
+   	const adminExists = await Admin.exists({ _id: adminId});
+	if (!adminExists) {
+		return res.status(403).json({ success: false, message: "Unauthorized" });
+
+	}
+
+    // Get query params
+    const { year, search, page, limit } = req.query;
+
+	// Validate input using Joi
+	const { error, value } = getStudentsValidation.validate({ year, search, page, limit }, { abortEarly: false });
+	if (error) {
+		const validationErrors = error.details.map(err => ({
+			field: err.path[0],
+			message: err.message
+		}));
+
+		return res.status(400).json({
+			success: false,
+			message: "Validation failed",
+			errors: validationErrors
+		});
+	}
+
+    // Use defaults
+	const pageNum = value.page || 1;
+	const limitNum = value.limit || 10;
+
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build filter
+    const filter = {};
+    if (year) {
+		filter.year = year.trim();
+	}
+    if (search) {
+		// sanitize to prevent regex injection
+		const safeSearch = search.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+		filter.$or = [
+			{ 'name.firstName': { $regex: safeSearch, $options: 'i' } },
+			{ 'name.middleName': { $regex: safeSearch, $options: 'i' } },
+			{ 'name.lastName': { $regex: safeSearch, $options: 'i' } },
+			{ 'name.motherName': { $regex: safeSearch, $options: 'i' } },
+		];
+    }
+
+
+    // Get total count for filtered results
+    const total = await Student.countDocuments(filter);
+
+    // Fetch students with pagination
+    const students = await Student.find(filter)
+      .skip(skip)
+      .limit(limitNum)
+      .select('-password')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json({
+      success: true,
+      data: students,
+      total,
+      page: pageNum,
+      totalPages: Math.ceil(total / limitNum),
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+
+// ==================== GET SINGLE STUDENT BY ID (Admin) ====================
+const getSingleStudent = async (req, res) => {
+	try {
+
+		const { studentId } = req.params;
+		if (!studentId) {
+			return res.status(400).json({ success: false, message: "Student ID is required" });
+		}
+
+		const adminId = req.user.id;
+
+		// Verify requester exists
+		if (req.user.role === "admin") {
+		const adminExists = await Admin.findById(adminId);
+		if (!adminExists) {
+			return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
+		}
+		} else{
+			return res.status(400).json({ success: false, message: "Bad Request" });
+		}
+
+		const student = await Student.findById(studentId);
+		if (!student) {
+			return res.status(404).json({ success: false, message: "Student not found" });
+		}
+
+		return res.status(200).json({ success: true, data: student });
+	} catch (error) {
+		console.error("Error in getSingleStudent:", error);
+		return res.status(500).json({ success: false, message: "Server Error" });
+	}
+};
+
+// Get single Student from req.user.id ( for student )
+const getStudentById= async (req,res)=>{
+
+	try{
+		const studentId=req.user.id;
+
+		if(!studentId){
+			return res.status(400).json({ success: false, message: "Student ID is required, Please Login first" });
+		}
+
+		const student = await Student.findById(studentId);
+		if (!student) {
+			return res.status(404).json({ success: false, message: "Student not found" });
+		}
+
+		return res.status(200).json({ success: true, data: student });
+	}catch(error){
+		console.error("Error in getStudentById : ", error);
+		return res.status(500).json({success: false, message: "Server Error"});
+	}
+
+}; 
+
+
+module.exports = {addStudentDetails, getStudentById ,getStudents, getSingleStudent, updateStudent, deleteStudent, importExcelDataWithPasswords };

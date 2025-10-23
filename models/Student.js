@@ -6,9 +6,10 @@ const studentSchema = new mongoose.Schema({
         firstName : { type : String , } ,
         middleName : { type : String , } ,
         lastName : { type : String , } ,
+        motherName : { type : String , } ,
     },
 
-    PRN: { type: String, unique: true } , 
+    PRN: { type: String, } , 
     studentID: { type: String, unique: true} ,
 
     email: { type: String, unique: true , },
