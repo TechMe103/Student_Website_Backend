@@ -70,6 +70,7 @@ const getOwnAchievements = async (req, res) => {
 };
 
 // GET all achievements (Admin only)
+// GET all achievements (Admin only) with search, filter, pagination
 const getAllAchievements = async (req, res) => {
   try {
     const { id, role } = req.user;
@@ -80,18 +81,51 @@ const getAllAchievements = async (req, res) => {
     if (!admin)
       return res.status(403).json({ success: false, message: "Admin not authorized" });
 
-    const achievements = await Achievement.find()
-      .populate("stuID", "name branch year")
-      .sort({ createdAt: -1 });
+    // Extract query params
+    const { category, achievementType, search, page = 1, limit = 10 } = req.query;
 
-    res.status(200).json({ success: true, data: achievements });
+    const query = {};
+
+    // Apply filters
+    if (category) query.category = category;
+    if (achievementType) query.achievementType = achievementType;
+
+    // Apply search (by title or issuedBy)
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { issuedBy: { $regex: search, $options: "i" } },
+        // optional: search by student name
+        { "stuID.name": { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+
+    const achievements = await Achievement.find(query)
+      .populate("stuID", "name roll branch year")
+      .sort({ createdAt: -1 })
+      .skip(parseInt(skip))
+      .limit(parseInt(limit));
+
+    const total = await Achievement.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      data: achievements,
+    });
   } catch (err) {
-    console.error("Error fetching all achievements:", err);
+    console.error("Error fetching achievements:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
 
+
 // GET achievements of a specific student (Admin only)
+// GET achievements of a specific student (Admin only) with search & pagination
 const getStudentAchievementsByAdmin = async (req, res) => {
   try {
     const { id, role } = req.user;
@@ -104,17 +138,45 @@ const getStudentAchievementsByAdmin = async (req, res) => {
     if (!student)
       return res.status(404).json({ success: false, message: "Student not found" });
 
-    const achievements = await Achievement.find({ stuID: studentId })
-      .populate("stuID", "name roll branch year")
-      .sort({ createdAt: -1 });
+    // Extract query params
+    const { category, achievementType, search, page = 1, limit = 10 } = req.query;
 
-    res.status(200).json({ success: true, data: achievements });
+    const query = { stuID: studentId };
+
+    // Filters
+    if (category) query.category = category;
+    if (achievementType) query.achievementType = achievementType;
+
+    // Search by title or issuedBy
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { issuedBy: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+
+    const achievements = await Achievement.find(query)
+      .populate("stuID", "name roll branch year")
+      .sort({ createdAt: -1 })
+      .skip(parseInt(skip))
+      .limit(parseInt(limit));
+
+    const total = await Achievement.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      data: achievements,
+    });
   } catch (err) {
     console.error("Error fetching student achievements:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
-
 
 // UPDATE Achievement (Student/Admin)
 const updateAchievement = async (req, res) => {
