@@ -14,9 +14,9 @@ router.delete("/delete/:id", verifyToken, deleteAdmission); // delete pending ad
 
 
 //ADMIN ROUTES
-router.get("/all", verifyToken, isAdmin, getAllAdmissions); // admin view all admissions
-router.put("/status/:id", verifyToken, isAdmin, updateAdmissionStatus); // approve/reject
-router.get("/unpaid", verifyToken, isAdmin, getUnpaidStudents); // unpaid students list
+router.get("/all", verifyToken, getAllAdmissions); // admin view all admissions
+router.put("/status/:id", verifyToken, updateAdmissionStatus); // approve/reject
+router.get("/unpaid", verifyToken, getUnpaidStudents); // unpaid students list
 
 
 module.exports = router;

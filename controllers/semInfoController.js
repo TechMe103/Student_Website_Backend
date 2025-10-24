@@ -111,33 +111,107 @@ const deleteSemInfo = async (req, res) => {
 };
 
 // GET ALL SEMESTER INFOS (ADMIN)
+// GET ALL SEMESTER INFOS (ADMIN) with filter + search + pagination
 const getAllSemInfos = async (req, res) => {
   try {
     const { id, role } = req.user;
-    if (role !== "admin") return res.status(403).json({ success: false, message: "Only admins can view all semester records" });
+    if (role !== "admin") {
+      return res.status(403).json({ success: false, message: "Only admins can view all semester records" });
+    }
 
     const admin = await Admin.findById(id);
     if (!admin) return res.status(403).json({ success: false, message: "Admin not authorized" });
 
-    const semData = await SemesterInfo.find()
-      .populate("stuID", "name roll branch year")
-      .sort({ createdAt: -1 });
+    //Extract filters from query params
+    const { semester, isDefaulter, search, page = 1, limit = 10 } = req.query;
 
-    res.status(200).json({ success: true, data: semData });
+    //Build query object
+    const query = {};
+    if (semester) query.semester = Number(semester);
+    if (isDefaulter !== undefined) query.isDefaulter = isDefaulter === "true";
+
+    //Pagination setup
+    const skip = (Number(page) - 1) * Number(limit);
+
+    //If search by student name
+    let semQuery = SemesterInfo.find(query)
+      .populate({
+        path: "stuID",
+        select: "name roll branch year",
+        match: search ? { name: { $regex: search, $options: "i" } } : {}, // case-insensitive
+      })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
+
+    const semData = await semQuery;
+
+    //Total count (ignoring search filter in populate)
+    const total = await SemesterInfo.countDocuments(query);
+
+    //Remove nulls from search (when populate didn't match)
+    const filteredData = semData.filter(item => item.stuID !== null);
+
+    res.status(200).json({
+      success: true,
+      total,
+      page: Number(page),
+      totalPages: Math.ceil(total / limit),
+      count: filteredData.length,
+      data: filteredData,
+    });
   } catch (err) {
     console.error("Error in getAllSemInfos:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
 
+
 // GET LOGGED-IN STUDENT'S SEMESTER INFOS
+// GET LOGGED-IN STUDENT'S SEMESTER INFOS (with filter + search + pagination)
 const getOwnSemInfos = async (req, res) => {
   try {
     const { id, role } = req.user;
-    if (role !== "student") return res.status(403).json({ success: false, message: "Only students can access their own semester info" });
+    if (role !== "student") {
+      return res.status(403).json({ success: false, message: "Only students can access their own semester info" });
+    }
 
-    const semInfos = await SemesterInfo.find({ stuID: id }).sort({ createdAt: -1 });
-    res.status(200).json({ success: true, data: semInfos });
+    //Extract query params
+    const { semester, isDefaulter, search, page = 1, limit = 5 } = req.query;
+
+    //Build base query
+    const query = { stuID: id };
+    if (semester) query.semester = Number(semester);
+    if (isDefaulter !== undefined) query.isDefaulter = isDefaulter === "true";
+
+    //Pagination setup
+    const skip = (Number(page) - 1) * Number(limit);
+
+    //Search by subject name (inside marks array)
+    let searchCondition = {};
+    if (search) {
+      searchCondition = {
+        marks: { $elemMatch: { subject: { $regex: search, $options: "i" } } }
+      };
+    }
+
+    //Fetch filtered + searched data
+    const semInfos = await SemesterInfo.find({ ...query, ...searchCondition })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
+
+    //Total count for pagination
+    const total = await SemesterInfo.countDocuments({ ...query, ...searchCondition });
+
+    res.status(200).json({
+      success: true,
+      total,
+      page: Number(page),
+      totalPages: Math.ceil(total / limit),
+      count: semInfos.length,
+      data: semInfos
+    });
   } catch (err) {
     console.error("Error in getOwnSemInfos:", err);
     res.status(500).json({ success: false, message: "Server Error" });
@@ -145,18 +219,55 @@ const getOwnSemInfos = async (req, res) => {
 };
 
 // GET SPECIFIC STUDENT'S SEMESTER INFOS (ADMIN)
+// GET SPECIFIC STUDENT'S SEMESTER INFOS (ADMIN) with filter + search + pagination
 const getStudentSemInfosByAdmin = async (req, res) => {
   try {
     const { id, role } = req.user;
     const { studentId } = req.params;
 
-    if (role !== "admin") return res.status(403).json({ success: false, message: "Only admins can view student semester info" });
+    if (role !== "admin") 
+      return res.status(403).json({ success: false, message: "Only admins can view student semester info" });
 
     const student = await Student.findById(studentId);
-    if (!student) return res.status(404).json({ success: false, message: "Student not found" });
+    if (!student) 
+      return res.status(404).json({ success: false, message: "Student not found" });
 
-    const semInfos = await SemesterInfo.find({ stuID: studentId }).sort({ createdAt: -1 });
-    res.status(200).json({ success: true, data: semInfos });
+    // Extract filters from query params
+    const { semester, isDefaulter, search, page = 1, limit = 10 } = req.query;
+
+    // Build query
+    const query = { stuID: studentId };
+    if (semester) query.semester = Number(semester);
+    if (isDefaulter !== undefined) query.isDefaulter = isDefaulter === "true";
+
+    // Pagination setup
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Search by subject name (inside marks array)
+    let searchCondition = {};
+    if (search) {
+      searchCondition = {
+        marks: { $elemMatch: { subject: { $regex: search, $options: "i" } } }
+      };
+    }
+
+    // Fetch data with filters + search + pagination
+    const semInfos = await SemesterInfo.find({ ...query, ...searchCondition })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
+
+    const total = await SemesterInfo.countDocuments({ ...query, ...searchCondition });
+
+    res.status(200).json({
+      success: true,
+      student: { name: student.name, roll: student.roll, branch: student.branch, year: student.year },
+      total,
+      page: Number(page),
+      totalPages: Math.ceil(total / limit),
+      count: semInfos.length,
+      data: semInfos
+    });
   } catch (err) {
     console.error("Error in getStudentSemInfosByAdmin:", err);
     res.status(500).json({ success: false, message: "Server Error" });
