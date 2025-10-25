@@ -7,7 +7,11 @@ const activitySchema = Joi.object({
   title: Joi.string().min(3).max(100).required(),
   description: Joi.string().min(5).max(500).required(),
   date: Joi.date().required(),
-  certificateURL: Joi.string().uri().optional(),
+  certificateURL: Joi.object({
+  url: Joi.string().uri().required(),
+  publicId: Joi.string().optional(),
+}).optional()
+
 });
 
 module.exports = { activitySchema };

@@ -8,7 +8,7 @@ const { createActivity , getActivityByStu , getActivitiesByStudentAdmin , update
 //Student Routes
 router.post("/", verifyToken, upload.single("certificate"), createActivity);
 router.get("/", verifyToken, getActivityByStu);
-router.put("/:id", verifyToken, updateActivity);
+router.put("/:id", verifyToken, upload.single("certificate"), updateActivity);
 router.delete("/:id", verifyToken, deleteActivity);
 
 // Admin Routes
