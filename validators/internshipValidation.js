@@ -48,6 +48,7 @@ const updateInternshipValidationSchema = Joi.object({
 
 const getInternshipsValidation = Joi.object({
   year: Joi.string().valid("SE", "TE", "BE").optional(),
+  isPaid: Joi.string().valid("true", "false").optional(),
   search: Joi.string().max(100).optional(),
   page: Joi.number().integer().min(1).optional(),
   limit: Joi.number().integer().min(1).max(20).optional()

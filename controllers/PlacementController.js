@@ -249,10 +249,13 @@ const getPlacements = async (req, res) => {
     }
 
     // Get query params
-    const { year, search, page, limit } = req.query;
+    const { year, search, page, limit, placementType } = req.query;
 
     // Validate input
-    const { error, value } = getPlacementsValidation.validate({ year, search, page, limit }, { abortEarly: false });
+    const { error, value } = getPlacementsValidation.validate(
+      { year, search, page, limit, placementType },
+      { abortEarly: false }
+    );
     if (error) {
       const validationErrors = error.details.map(err => ({
         field: err.path[0],
@@ -293,11 +296,14 @@ const getPlacements = async (req, res) => {
       match.$or = [
         { companyName: { $regex: safeSearch, $options: "i" } },
         { role: { $regex: safeSearch, $options: "i" } },
-        { placementType: { $regex: safeSearch, $options: "i" } },
         { "student.name.firstName": { $regex: safeSearch, $options: "i" } },
         { "student.name.middleName": { $regex: safeSearch, $options: "i" } },
         { "student.name.lastName": { $regex: safeSearch, $options: "i" } },
       ];
+    }
+
+    if (placementType) {
+      match.placementType = placementType.trim();
     }
 
     if (Object.keys(match).length) {
@@ -352,6 +358,9 @@ const getPlacements = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+
+
 // --------------------------- GET STUDENT'S OWN PLACEMENTS --------------------------- //
 const getOwnPlacements = async (req, res) => {
 	try {

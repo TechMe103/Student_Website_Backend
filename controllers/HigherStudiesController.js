@@ -187,8 +187,7 @@ const deleteHigherStudy = async (req, res) => {
     }
 };
 
-
-
+// GET HIGHER STUDIES (with optional pagination, search, year filter, and examName filter)
 const getHigherStudies = async (req, res) => {
   try {
     const adminId = req.user.id;
@@ -200,22 +199,19 @@ const getHigherStudies = async (req, res) => {
     }
 
     // Get query params
-    const { year, search, page, limit } = req.query;
+    const { year, search, page, limit, examName } = req.query;
 
     // Validate input
     const { error, value } = getHigherStudiesValidation.validate(
-      { year, search, page, limit },
+      { year, search, page, limit, examName },
       { abortEarly: false }
     );
-
     if (error) {
       const validationErrors = error.details.map(err => ({
         field: err.path[0],
-        message: err.message,
+        message: err.message
       }));
-      return res
-        .status(400)
-        .json({ success: false, message: "Validation failed", errors: validationErrors });
+      return res.status(400).json({ success: false, message: "Validation failed", errors: validationErrors });
     }
 
     const pageNum = value.page || 1;
@@ -231,8 +227,8 @@ const getHigherStudies = async (req, res) => {
         from: "students",
         localField: "stuID",
         foreignField: "_id",
-        as: "student",
-      },
+        as: "student"
+      }
     });
 
     // Unwind student array
@@ -241,26 +237,23 @@ const getHigherStudies = async (req, res) => {
     // Build match conditions
     const match = {};
 
-    if (year) {
-      match["student.year"] = year.trim();
-    }
+    if (year) match["student.year"] = year.trim();
+
+    if (examName) match["examName"] = examName.trim();
 
     if (search) {
       const safeSearch = search.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
       match.$or = [
-        { examName: { $regex: safeSearch, $options: "i" } },
-        { score: { $regex: safeSearch, $options: "i" } },
         { "student.name.firstName": { $regex: safeSearch, $options: "i" } },
         { "student.name.middleName": { $regex: safeSearch, $options: "i" } },
         { "student.name.lastName": { $regex: safeSearch, $options: "i" } },
+        { examName: { $regex: safeSearch, $options: "i" } },
       ];
     }
 
-    if (Object.keys(match).length) {
-      pipeline.push({ $match: match });
-    }
+    if (Object.keys(match).length) pipeline.push({ $match: match });
 
-    // Use $facet for pagination + total count
+    // Facet for pagination + total count
     const results = await HigherStudies.aggregate([
       ...pipeline,
       {
@@ -271,41 +264,38 @@ const getHigherStudies = async (req, res) => {
             { $limit: limitNum },
             {
               $project: {
-                examName: 1,
-                score: 1,
-                marksheet: 1,
                 stuID: "$student._id",
                 studentName: "$student.name",
                 studentYear: "$student.year",
-              },
-            },
+                examName: 1,
+                score: 1,
+                marksheet: 1,
+              }
+            }
           ],
-          totalCount: [{ $count: "total" }],
-        },
-      },
+          totalCount: [{ $count: "total" }]
+        }
+      }
     ]);
 
     const higherStudies = results[0]?.data || [];
     const total = results[0]?.totalCount[0]?.total || 0;
 
-    return res.json({
+    res.status(200).json({
       success: true,
       data: higherStudies,
       total,
       page: pageNum,
-      totalPages: Math.ceil(total / limitNum),
+      limit: limitNum
     });
+
   } catch (err) {
-    console.error({
-      level: "error",
-      message: "Error in getHigherStudies controller",
-      error: err.message,
-      stack: err.stack,
-      time: new Date().toISOString(),
-    });
+    console.error(err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+
 
 // Get higher studies by student ID
 const getHigherStudiesByStudent = async (req, res) => {

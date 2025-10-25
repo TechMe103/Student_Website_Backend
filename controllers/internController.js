@@ -135,7 +135,7 @@ const createInternship = async (req, res) => {
     }
 };
 
-// GET INTERNSHIPS (with optional pagination & search + year filter)
+// GET INTERNSHIPS (with optional pagination, search, year filter, and paid/unpaid filter)
 const getInternships = async (req, res) => {
   try {
     const adminId = req.user.id;
@@ -147,10 +147,13 @@ const getInternships = async (req, res) => {
     }
 
     // Get query params
-    const { year, search, page, limit } = req.query;
+    const { year, search, page, limit, isPaid } = req.query;
 
     // Validate input
-    const { error, value } = getInternshipsValidation.validate({ year, search, page, limit }, { abortEarly: false });
+    const { error, value } = getInternshipsValidation.validate(
+      { year, search, page, limit, isPaid },
+      { abortEarly: false }
+    );
     if (error) {
       const validationErrors = error.details.map(err => ({
         field: err.path[0],
@@ -197,6 +200,10 @@ const getInternships = async (req, res) => {
         { "student.name.lastName": { $regex: safeSearch, $options: "i" } },
       ];
     }
+
+    // Filter by paid/unpaid
+    if (isPaid === "true") match["stipendInfo.isPaid"] = true;
+    else if (isPaid === "false") match["stipendInfo.isPaid"] = false;
 
     if (Object.keys(match).length) {
       pipeline.push({ $match: match });
@@ -255,6 +262,114 @@ const getInternships = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+
+// GET INTERNSHIPS (with optional paid/unpaid filter, simplified + production ready)
+// const getInternships = async (req, res) => {
+//   try {
+//     const adminId = req.user.id;
+
+//     // ✅ Verify admin access
+//     const adminExists = await Admin.exists({ _id: adminId });
+//     if (!adminExists) {
+//         return res.status(403).json({ success: false, message: "Unauthorized" });
+//     }
+
+//     // ✅ Get query params
+//     const { year, search, page, limit, paid } = req.query; // added 'paid'
+
+//     // ✅ Validate input
+//     const { error, value } = getInternshipsValidation.validate(
+//         { year, search, page, limit, paid },
+//         { abortEarly: false }
+//     );
+//     if (error) {
+//         const validationErrors = error.details.map(err => ({
+//             field: err.path[0],
+//             message: err.message,
+//         }));
+//         return res.status(400).json({
+//             success: false,
+//             message: "Validation failed",
+//             errors: validationErrors,
+//         });
+//     }
+
+//     const pageNum = value.page || 1;
+//     const limitNum = Math.min(value.limit || 10, 20);
+//     const skip = (pageNum - 1) * limitNum;
+
+//     // ✅ Build main filter
+//     const filter = {};
+
+//     // ✅ Filter by year (SE, TE, BE)
+//     if (year) {
+//         const studentIds = await Student.find({ year: year.trim() }).distinct("_id");
+//         filter.stuID = { $in: studentIds };
+//     }
+
+//     // ✅ Filter by paid/unpaid
+//     if (value.paid !== undefined) {
+//         // Convert string 'true'/'false' to boolean
+//         const isPaid = value.paid === "true";
+//         filter["stipendInfo.isPaid"] = isPaid;
+//     }
+
+//     // ✅ Search filter
+//     if (search) {
+//         const safeSearch = search.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+//         filter.$or = [
+//             { companyName: { $regex: safeSearch, $options: "i" } },
+//             { role: { $regex: safeSearch, $options: "i" } },
+//             { description: { $regex: safeSearch, $options: "i" } },
+//         ];
+//     }
+
+//     // ✅ Total count for pagination
+//     const total = await Internship.countDocuments(filter);
+
+//     // ✅ Fetch internships + student details
+//     const internships = await Internship.find(filter)
+//         .populate({
+//             path: "stuID",
+//             select: "name year branch", // only include student name & year
+//         })
+//         .sort({ createdAt: -1 })
+//         .skip(skip)
+//         .limit(limitNum)
+//         .lean();
+
+//     // ✅ Format consistent response
+//     const formattedData = internships.map(intern => ({
+//         _id: intern._id,
+//         companyName: intern.companyName,
+//         role: intern.role,
+//         startDate: intern.startDate,
+//         endDate: intern.endDate,
+//         durationMonths: intern.durationMonths,
+//         stipendInfo: intern.stipendInfo,
+//         description: intern.description,
+//         internshipReport: intern.internshipReport,
+//         photoProof: intern.photoProof,
+//         stuID: intern.stuID?._id,
+//         studentName: intern.stuID?.name,
+//         studentYear: intern.stuID?.year,
+//     }));
+
+//     // ✅ Send response
+//     return res.json({
+//       success: true,
+//       data: internships,
+//       total,
+//       page: pageNum,
+//       totalPages: Math.ceil(total / limitNum),
+//     });
+
+//   } catch (err) {
+//     console.error("Error in getInternships:", err);
+//     res.status(500).json({ success: false, message: "Server error" });
+//   }
+// };
 
 
 
