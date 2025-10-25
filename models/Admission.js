@@ -32,8 +32,9 @@ const admissionSchema = new mongoose.Schema({
         required: true
     } 
     
-});
+}, { timestamps: true });
 
+// Static helper: get unpaid students
 
 admissionSchema.statics.getUnpaidStudents = function (){
     return this.find({ isFeesPaid: false }).populate("stuID");
