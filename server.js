@@ -4,12 +4,11 @@ const cookieParser = require("cookie-parser");
 const connectDB = require('./config/db');
 require("dotenv").config();
 
-
+// const createDefaultAdmin = require('./seedAdmin');
 
 const PORT = 5000;
 
 const app = express();
-
 
 connectDB()
 
@@ -19,6 +18,7 @@ app.use(express.json({limit: "50mb",}));
 app.use(express.urlencoded({limit: "50mb", extended: true}));
 app.use(cookieParser());
 
+// createDefaultAdmin();
 
 // Routes
 app.use("/api/auth", require('./routes/authRoutes'));
