@@ -12,10 +12,10 @@ const {
 } = require("../controllers/admissionController");
 
 // Student routes
-router.post("/create", verifyToken, createAdmission);
+router.post("/", verifyToken, createAdmission);
 router.get("/my-admissions", verifyToken, getAdmissionsByStudent);
-router.put("/update/:id", verifyToken, updateAdmission);
-router.delete("/delete/:id", verifyToken, deleteAdmission);
+router.put("/:id", verifyToken, updateAdmission);
+router.delete("/:id", verifyToken, deleteAdmission);
 
 // Admin routes
 router.get("/all", verifyToken, getAllAdmissions);
