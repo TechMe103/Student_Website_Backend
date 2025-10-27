@@ -39,7 +39,7 @@ const createAdmission = async (req, res) => {
   }
 };
 
-//Get all admissions of a student
+//Get admissions of a student
 const getAdmissionsByStudent = async (req, res) => {
   try {
     const admissions = await Admission.find({ stuID: req.user.id }).sort({ createdAt: -1 });
@@ -121,20 +121,32 @@ const getAllAdmissions = async (req, res) => {
     if (value.academicYear) filter.academicYear = value.academicYear;
     if (value.filterPaid) filter.isFeesPaid = value.filterPaid === "paid";
 
-    let searchQuery = {};
+    let query = { ...filter };
+
+    //Search filter
     if (value.search) {
       const regex = new RegExp(value.search, "i");
-      searchQuery = {
-        $or: [
-          { rollno: regex },
-          { div: regex },
-          { course: regex },
-          { academicYear: regex },
-        ],
-      };
-    }
 
-    const query = { ...filter, ...searchQuery };
+      // Find student IDs matching the searched name
+      const matchingStudents = await Student.find({
+        $or: [
+          { "name.firstName": regex },
+          { "name.middleName": regex },
+          { "name.lastName": regex },
+          { "name.motherName": regex },
+        ],
+      }).select("_id");
+
+      const studentIds = matchingStudents.map((stu) => stu._id);
+
+      query.$or = [
+        { rollno: regex },
+        { div: regex },
+        { course: regex },
+        { academicYear: regex },
+        { stuID: { $in: studentIds } }, //Search by student name
+      ];
+    }
 
     const [admissions, total] = await Promise.all([
       Admission.find(query)
@@ -157,6 +169,7 @@ const getAllAdmissions = async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
+
 
 //Admin=> Update admission status
 const updateAdmissionStatus = async (req, res) => {
