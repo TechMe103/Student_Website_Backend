@@ -35,8 +35,6 @@ const importExcelDataWithPasswords = async (req, res) => {
 	try {
 		const adminId = req.user.id;
 
-
-
 		// Verify admin exists
 		const adminExists = await Admin.findById(adminId);
 		if (!adminExists) {
@@ -142,6 +140,87 @@ const importExcelDataWithPasswords = async (req, res) => {
 		message: "Error importing Excel data",
 		});
 	}
+};
+
+
+
+// Controller: Export all students to Excel
+const exportAllStudentsToExcel = async (req, res) => {
+  try {
+
+	const adminId=req.user.id;
+
+	if(req.user.role !== "admin"){
+		return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
+	}
+
+	// Verify admin exists
+	const adminExists = await Admin.findById(adminId);
+	if (!adminExists) {
+		return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
+	}
+
+
+
+    // 1. Fetch all students from DB
+    const students = await Student.find();
+
+    if (!students || students.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No students found in the database.",
+      });
+    }
+
+    // 2. Format data for Excel
+    const formattedData = students.map((student) => ({
+      StudentID: student.studentID || "",
+	  Name: student.name?.lastName + student.name?.firstName + student.name?.middleName || "",
+      Email: student.email || "",
+      Branch: student.branch + "Engineering" || "",
+      Year: student.year || "",
+      DOB: student.dob || "",
+      BloodGroup: student.bloodGroup || "",
+      MobileNo: student.mobileNo || "",
+      CurrentStreet: student.currentAddress?.street || "",
+      CurrentCity: student.currentAddress?.city || "",
+      CurrentPincode: student.currentAddress?.pincode || "",
+	  StudentPhotoURL: student.studentPhoto?.url || "",
+
+    }));
+
+    // 3. Create a new workbook and sheet
+    const workbook = xlsx.utils.book_new();
+    const worksheet = xlsx.utils.json_to_sheet(formattedData);
+
+    xlsx.utils.book_append_sheet(workbook, worksheet, "Students");
+
+    // 4. Save file temporarily to server
+    const exportDir = path.join(__dirname, "../exports");
+    if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir);
+
+    const filePath = path.join(exportDir, `Students_${Date.now()}.xlsx`);
+    xlsx.writeFile(workbook, filePath);
+
+    // 5. Send file to user for download
+    res.download(filePath, "StudentsData.xlsx", (err) => {
+      if (err) {
+        console.error("Error while downloading file:", err);
+        res.status(500).json({ success: false, message: "File download failed" });
+      }
+
+      // 6. Delete file after sending (to avoid clutter)
+      fs.unlink(filePath, (delErr) => {
+        if (delErr) console.error("Error deleting temp file:", delErr);
+      });
+    });
+  } catch (error) {
+    console.error("Error exporting students to Excel:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error while exporting data.",
+    });
+  }
 };
 
 
@@ -582,4 +661,4 @@ const getStudentById= async (req,res)=>{
 }; 
 
 
-module.exports = {addStudentDetails, getStudentById ,getStudents, getSingleStudent, updateStudent, deleteStudent, importExcelDataWithPasswords };
+module.exports = {addStudentDetails, getStudentById ,getStudents, getSingleStudent, updateStudent, deleteStudent, importExcelDataWithPasswords, exportAllStudentsToExcel };
