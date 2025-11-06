@@ -9,7 +9,7 @@ const activitySchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["Committee", "Sports", "Hackathon"],
+      enum: ["Committee"], // Only Committee allowed
       required: true,
     },
     title: {
@@ -27,8 +27,8 @@ const activitySchema = new mongoose.Schema(
       required: true,
     },
     certificateURL: {
-      url: { type: String },
-      publicId: { type: String },
+      url: { type: String }, // Cloudinary secure URL
+      publicId: { type: String }, // Cloudinary public_id for deletion
     },
   },
   { timestamps: true }
