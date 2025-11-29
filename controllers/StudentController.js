@@ -177,7 +177,7 @@ const exportAllStudentsToExcel = async (req, res) => {
       StudentID: student.studentID || "",
 	  Name: student.name?.lastName + student.name?.firstName + student.name?.middleName || "",
       Email: student.email || "",
-      Branch: student.branch + "Engineering" || "",
+      Branch: student.branch + "",
       Year: student.year || "",
       DOB: student.dob || "",
       BloodGroup: student.bloodGroup || "",

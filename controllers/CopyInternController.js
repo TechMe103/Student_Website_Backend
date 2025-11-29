@@ -3,8 +3,6 @@ const Student = require("../models/Student");
 const  {uploadToCloudinary}=require("../helpers/UploadToCloudinary");
 const Admin = require("../models/Admin");
 const cloudinary = require("../config/cloudinaryConfig");
-const {deleteMultipleFromCloudinary} = require("../helpers/DeleteMultipleFromCloudinary");
-const {validateAndUploadFiles} = require("../helpers/ValidateAndUploadFiles");
 
 const { internshipValidationSchema, updateInternshipValidationSchema, getInternshipsValidation } = require("../validators/internshipValidation");
 
@@ -30,7 +28,7 @@ const ALLOWED_PROOF_TYPES = ["image/jpeg", "image/jpg", "image/png"];
 
 const createInternship = async (req, res) => {
 
-    let uploadedFiles;
+    let reportResult, proofResult;
     let dbSaved=false; //flag to track if save to Db oprations succeeds or fails
 
     try {
@@ -50,19 +48,19 @@ const createInternship = async (req, res) => {
         const parsedIsPaid = isPaidRaw === "true" || isPaidRaw === true;
 
         // Validate input using Joi
-		const { error } = internshipValidationSchema.validate({ companyName, startDate, endDate, role, durationMonths : parsedDurationMonths, isPaid: parsedIsPaid, stipend : parsedStipend, description }, { abortEarly: false });
-		if (error) {
-			const validationErrors = error.details.map(err => ({
-				field: err.path[0],
-				message: err.message
-			}));
+        const { error } = internshipValidationSchema.validate({ companyName, startDate, endDate, role, durationMonths : parsedDurationMonths, isPaid: parsedIsPaid, stipend : parsedStipend, description }, { abortEarly: false });
+        if (error) {
+            const validationErrors = error.details.map(err => ({
+                field: err.path[0],
+                message: err.message
+            }));
 
-			return res.status(400).json({
-				success: false,
-				message: "Validation failed",
-				errors: validationErrors
-			});
-		}
+            return res.status(400).json({
+                success: false,
+                message: "Validation failed",
+                errors: validationErrors
+            });
+        }
 
         // Manual check
         if (parsedIsPaid && (parsedStipend === undefined || parsedStipend === null)) {
@@ -73,23 +71,32 @@ const createInternship = async (req, res) => {
         const stipendInfo = { isPaid: parsedIsPaid };
         if (parsedIsPaid) stipendInfo.stipend = parsedStipend;
 
+        // Access uploaded files safely
+        const internshipReport = req.files?.internshipReport?.[0];
+        const photoProof = req.files?.photoProof?.[0];
 
-        uploadedFiles = await validateAndUploadFiles(req.files, [
-            {
-                fieldName: "internshipReport",
-                allowedTypes: ["application/pdf"],
-                maxSize: 5 * 1024 * 1024,
-                friendlyName: "Internship Report"
-            },
-            {
-                fieldName: "photoProof",
-                allowedTypes: ["image/jpeg", "image/jpg", "image/png"],
-                maxSize: 5 * 1024 * 1024,
-                friendlyName: "Photo Proof"
-            }
-        ]);
+        if (!internshipReport || !photoProof) {
+            return res.status(400).json({ success: false, message: "Both internship report and photo proof are required" });
+        }
 
+        if (internshipReport.mimetype !== ALLOWED_REPORT_TYPE){
+            return res.status(400).json({ success: false, message: "Internship report must be a PDF" });
+        }
+
+        if (internshipReport.size > MAX_FILE_SIZE){
+            return res.status(400).json({ success: false, message: "Internship report exceeds 5MB" });
+        }
+
+        if (!ALLOWED_PROOF_TYPES.includes(photoProof.mimetype)) {
+            return res.status(400).json({ success: false, message: "Photo proof must be JPG or PNG" });
+        }
+
+        if (photoProof.size > MAX_FILE_SIZE){
+            return res.status(400).json({ success: false, message: "Photo proof exceeds 5MB" });
+        }
         
+
+        ({ reportResult, proofResult } = await uploadInternshipFiles(internshipReport.path, photoProof.path));
 
         // Create Internship
         const internship = new Internship({
@@ -102,33 +109,29 @@ const createInternship = async (req, res) => {
             description,
             stipendInfo,
             internshipReport: {
-                url:  uploadedFiles.internshipReport.url,
-                publicId:  uploadedFiles.internshipReport.publicId
+                url: reportResult.url,
+                publicId: reportResult.publicId
             },
             photoProof: {
-                url:  uploadedFiles.photoProof.url,
-                publicId:  uploadedFiles.photoProof.publicId
+                url: proofResult.url,
+                publicId: proofResult.publicId
             }
         });
 
         const saveResult = await internship.save();
         dbSaved=true;   //set flag if DB save is sucessful
 
-        return res.status(201).json({ success: true, internship });
+        res.status(201).json({ success: true, internship });
 
     } catch (err) {
         console.error("Error in createInternship controller: ", err);
 
         // if save to DB operation fails, then files stored in cloudinary must be deleted, as files are useless now
-        if (!dbSaved && uploadedFiles) {
-
-            //create publicId array
-            const publicIds = Object.values(uploadedFiles).map(file => file.publicId);
-
-            await deleteMultipleFromCloudinary(publicIds);
+        if (!dbSaved) {
+            if (reportResult?.publicId) await cloudinary.uploader.destroy(reportResult.publicId);
+            if (proofResult?.publicId) await cloudinary.uploader.destroy(proofResult.publicId);
         }
-
-        return res.status(500).json({ success: false, message: "Internal Server Error. Please Try Again Later" });
+        res.status(500).json({ success: false, message: "Internal Server Error. Please Try Again Later" });
     }
 };
 
@@ -541,19 +544,19 @@ const updateInternship = async (req, res) => {
         const parsedIsPaid = isPaidRaw === "true" || isPaidRaw === true;
 
         // Validate input using Joi
-		const { error } = updateInternshipValidationSchema.validate({ companyName, startDate, endDate, role, durationMonths : parsedDurationMonths, isPaid: parsedIsPaid, stipend : parsedStipend, description }, { abortEarly: false });
-		if (error) {
-			const validationErrors = error.details.map(err => ({
-				field: err.path[0],
-				message: err.message
-			}));
+        const { error } = updateInternshipValidationSchema.validate({ companyName, startDate, endDate, role, durationMonths : parsedDurationMonths, isPaid: parsedIsPaid, stipend : parsedStipend, description }, { abortEarly: false });
+        if (error) {
+            const validationErrors = error.details.map(err => ({
+                field: err.path[0],
+                message: err.message
+            }));
 
-			return res.status(400).json({
-				success: false,
-				message: "Validation failed",
-				errors: validationErrors
-			});
-		}
+            return res.status(400).json({
+                success: false,
+                message: "Validation failed",
+                errors: validationErrors
+            });
+        }
 
         // Manual check
         if (parsedIsPaid && (parsedStipend === undefined || parsedStipend === null)) {
@@ -698,27 +701,20 @@ const deleteInternship = async (req, res) => {
     
 
     // Delete files from Cloudinary if public_id exists
-    const publicIdsToDelete = [];
+    if (internship.internshipReport.publicId) {
+      await cloudinary.uploader.destroy(internship.internshipReport.publicId);
+    }
+    if (internship.photoProof.publicId) {
+      await cloudinary.uploader.destroy(internship.photoProof.publicId);
+    }
 
-        if (internship.internshipReport?.publicId) {
-            publicIdsToDelete.push(internship.internshipReport.publicId);
-        }
-        if (internship.photoProof?.publicId) {
-            publicIdsToDelete.push(internship.photoProof.publicId);
-        }
+    // Delete internship document from DB
+    await Internship.findByIdAndDelete(internshipId);
 
-        // 4. Delete internship from DB
-        await Internship.findByIdAndDelete(internshipId);
-
-        // 5. Delete files from Cloudinary (helper handles errors internally)
-        await deleteMultipleFromCloudinary(publicIdsToDelete);
-
-        
-
-    return res.status(200).json({ success: true, message: "Internship deleted successfully" });
+    res.status(200).json({ success: true, message: "Internship deleted successfully" });
   } catch (err) {
     console.error("Error in deleteInternship controller:", err);
-    return res.status(500).json({ success: false, message: "Internal Server Error" });
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
 
