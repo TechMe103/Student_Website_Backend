@@ -75,6 +75,9 @@ exports.signup = async (req, res) => {
             studentPhoto
         });
 
+        const studentObj = student.toObject();
+        delete studentObj.password;
+
         // Create JWT
         const token = jwt.sign(
         { id: student._id, role: 'student' },
@@ -85,7 +88,7 @@ exports.signup = async (req, res) => {
         // Send JWT only in cookie
         res.cookie('token', token, cookieOptions);
 
-        return res.status(201).json({ success: true, message: 'Signup successful' });
+        return res.status(201).json({ success: true, message: 'Signup successful', data:studentObj });
     } catch (error) {
         console.error("Signup Error:", error);
         return res.status(500).json({ success: false, message: "Internal Server Error. Please try again later." });
@@ -123,6 +126,9 @@ exports.login = async (req, res) => {
         const match = await bcrypt.compare(password, student.password);
         if (!match) return res.status(400).json({ error: 'Invalid credentials' });
 
+        const studentObj = student.toObject();
+        delete studentObj.password;
+
         const token = jwt.sign(
         { id: student._id, role: 'student' },
         JWT_SECRET,
@@ -130,7 +136,7 @@ exports.login = async (req, res) => {
         );
 
         res.cookie('token', token, cookieOptions);
-        return res.status(200).json({ message: 'Login successful' });
+        return res.status(200).json({ success:true, message: 'Login successful', data:studentObj });
     } catch (error) {
         console.error("Login Error:", error);
         return res.status(500).json({ success: false, message: "Internal Server Error. Please try again later." });
@@ -148,6 +154,10 @@ exports.adminLogin = async (req, res) => {
         const match = await bcrypt.compare(password, admin.password);
         if (!match) return res.status(400).json({ success: false, message: 'Invalid credentials' });
 
+        const adminObj = admin.toObject();
+        delete adminObj.password;
+
+
         const token = jwt.sign(
         { id: admin._id, email: admin.email, role: 'admin' },
         JWT_SECRET,
@@ -155,7 +165,7 @@ exports.adminLogin = async (req, res) => {
         );
 
         res.cookie('token', token, cookieOptions);
-        return res.status(200).json({ message: 'Admin login successful' });
+        return res.status(200).json({ success:true, message: 'Admin login successful', data:adminObj });
     } catch (error) {
         console.error("Admin Login Error:", error);
         return res.status(500).json({ success: false, message: "Internal Server Error. Please try again later." });
