@@ -9,7 +9,7 @@ const cloudinary = require("../config/cloudinaryConfig");
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_CERT_TYPES = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
 
-// Helper to validate file
+// Helper: Validate uploaded file
 const validateFile = (file, allowedTypes, maxSize) => {
   if (!file) return false;
   if (!allowedTypes.includes(file.mimetype)) return false;
@@ -17,7 +17,7 @@ const validateFile = (file, allowedTypes, maxSize) => {
   return true;
 };
 
-// Safe delete from Cloudinary
+// Helper: Safe delete from Cloudinary
 const safeDeleteFile = async (publicId) => {
   try {
     if (publicId) await cloudinary.uploader.destroy(publicId);
@@ -26,18 +26,22 @@ const safeDeleteFile = async (publicId) => {
   }
 };
 
-// CREATE Activity (Student only)
+// CREATE Committee Activity (Student only)
 const createActivity = async (req, res) => {
   let uploadedFileId = null;
   try {
     const { id, role } = req.user;
-    if (role !== "student") return res.status(403).json({ success: false, message: "Only students can create activities" });
+    if (role !== "student")
+      return res.status(403).json({ success: false, message: "Only students can create committee activities" });
 
     const student = await Student.findById(id);
-    if (!student) return res.status(404).json({ success: false, message: "Student not found" });
+    if (!student)
+      return res.status(404).json({ success: false, message: "Student not found" });
 
+    // Validate body (without type)
     const { error } = activitySchema.validate(req.body);
-    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    if (error)
+      return res.status(400).json({ success: false, message: error.details[0].message });
 
     let certificate = null;
     if (req.file) {
@@ -48,16 +52,18 @@ const createActivity = async (req, res) => {
       uploadedFileId = certificate.publicId;
     }
 
+    // Force type = Committee
     const newActivity = new Activity({
       stuID: id,
+      type: "Committee",
       ...req.body,
       certificateURL: certificate ? { url: certificate.url, publicId: certificate.publicId } : null,
     });
 
-    const populated = await newActivity.populate("stuID", "name roll branch year");
     await newActivity.save();
+    const populated = await newActivity.populate("stuID", "name roll branch year");
 
-    res.status(201).json({ success: true, message: "Activity created successfully", data: populated });
+    res.status(201).json({ success: true, message: "Committee activity created successfully", data: populated });
   } catch (err) {
     if (uploadedFileId) await safeDeleteFile(uploadedFileId);
     console.error("Error creating activity:", err);
@@ -65,13 +71,14 @@ const createActivity = async (req, res) => {
   }
 };
 
-// GET Activities by Student (logged-in)
+// GET Committee Activities by Student (Student only)
 const getActivityByStu = async (req, res) => {
   try {
     const { id, role } = req.user;
-    if (role !== "student") return res.status(403).json({ success: false, message: "Only students can view their activities" });
+    if (role !== "student")
+      return res.status(403).json({ success: false, message: "Only students can view their activities" });
 
-    const activities = await Activity.find({ stuID: id })
+    const activities = await Activity.find({ stuID: id, type: "Committee" })
       .populate("stuID", "name roll branch year")
       .sort({ createdAt: -1 });
 
@@ -83,23 +90,23 @@ const getActivityByStu = async (req, res) => {
 };
 
 // GET Activities by Student ID (Admin only)
-// GET Activities by Student ID (Admin only) with search/filter/pagination
 const getActivitiesByStudentAdmin = async (req, res) => {
   try {
     const { id, role } = req.user;
-    if (role !== "admin") return res.status(403).json({ success: false, message: "Only admins can view activities" });
+    if (role !== "admin")
+      return res.status(403).json({ success: false, message: "Only admins can view committee activities" });
 
     const student = await Student.findById(req.params.studentId);
-    if (!student) return res.status(404).json({ success: false, message: "Student not found" });
+    if (!student)
+      return res.status(404).json({ success: false, message: "Student not found" });
 
-    const { search, type, studentName, page = 1, limit = 10 } = req.query;
-    const query = { stuID: req.params.studentId };
+    const { search, studentName, page = 1, limit = 10 } = req.query;
+    const query = { stuID: req.params.studentId, type: "Committee" };
 
-    if (type) query.type = type;
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: "i" } },
-        { type: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -124,7 +131,7 @@ const getActivitiesByStudentAdmin = async (req, res) => {
       total,
       page: parseInt(page),
       pages: Math.ceil(total / limit),
-      data: activities.filter(act => act.stuID), // remove null populated students
+      data: activities.filter(act => act.stuID),
     });
   } catch (err) {
     console.error("Error fetching student activities:", err);
@@ -132,8 +139,7 @@ const getActivitiesByStudentAdmin = async (req, res) => {
   }
 };
 
-
-// UPDATE Activity (Student only)
+// UPDATE Committee Activity (Student/Admin)
 const updateActivity = async (req, res) => {
   let uploadedFileId = null;
   try {
@@ -150,22 +156,25 @@ const updateActivity = async (req, res) => {
     }
 
     const { error } = activitySchema.validate(req.body, { presence: "optional" });
-    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    if (error)
+      return res.status(400).json({ success: false, message: error.details[0].message });
 
     if (req.file) {
       if (!validateFile(req.file, ALLOWED_CERT_TYPES, MAX_FILE_SIZE))
         return res.status(400).json({ success: false, message: "Certificate must be JPG/PNG/PDF and <= 5MB" });
 
-      if (activity.certificateURL?.publicId) await safeDeleteFile(activity.certificateURL.publicId);
+      if (activity.certificateURL?.publicId)
+        await safeDeleteFile(activity.certificateURL.publicId);
+
       const uploaded = await uploadToCloudinary(req.file.path, "certificates");
       uploadedFileId = uploaded.publicId;
       activity.certificateURL = { url: uploaded.url, publicId: uploaded.publicId };
     }
 
-    Object.assign(activity, req.body);
+    Object.assign(activity, req.body, { type: "Committee" }); // Always keep Committee
     await activity.save();
 
-    res.status(200).json({ success: true, message: "Activity updated successfully", data: activity });
+    res.status(200).json({ success: true, message: "Committee activity updated successfully", data: activity });
   } catch (err) {
     if (uploadedFileId) await safeDeleteFile(uploadedFileId);
     console.error("Error updating activity:", err);
@@ -173,13 +182,13 @@ const updateActivity = async (req, res) => {
   }
 };
 
-
-// DELETE Activity (Student only)
+// DELETE Committee Activity (Student/Admin)
 const deleteActivity = async (req, res) => {
   try {
     const { id: userId, role } = req.user;
     const activity = await Activity.findById(req.params.id);
-    if (!activity) return res.status(404).json({ success: false, message: "Activity not found" });
+    if (!activity)
+      return res.status(404).json({ success: false, message: "Activity not found" });
 
     if (role === "student" && activity.stuID.toString() !== userId)
       return res.status(403).json({ success: false, message: "Unauthorized" });
@@ -189,33 +198,36 @@ const deleteActivity = async (req, res) => {
       if (!admin) return res.status(403).json({ success: false, message: "Admin not authorized" });
     }
 
-    if (activity.certificateURL?.publicId) await safeDeleteFile(activity.certificateURL.publicId);
+    if (activity.certificateURL?.publicId)
+      await safeDeleteFile(activity.certificateURL.publicId);
+
     await activity.deleteOne();
 
-    res.status(200).json({ success: true, message: "Activity deleted successfully" });
+    res.status(200).json({ success: true, message: "Committee activity deleted successfully" });
   } catch (err) {
     console.error("Error deleting activity:", err);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
 
-// GET All Activities (Admin only) with search/filter/pagination & student-name search
+// GET All Committee Activities (Admin only)
 const getAllActivities = async (req, res) => {
   try {
     const { id, role } = req.user;
-    if (role !== "admin") return res.status(403).json({ success: false, message: "Access denied" });
+    if (role !== "admin")
+      return res.status(403).json({ success: false, message: "Access denied" });
 
     const admin = await Admin.findById(id);
-    if (!admin) return res.status(403).json({ success: false, message: "Admin not authorized" });
+    if (!admin)
+      return res.status(403).json({ success: false, message: "Admin not authorized" });
 
-    const { type, search, studentName, page = 1, limit = 10 } = req.query;
-    const query = {};
+    const { search, studentName, page = 1, limit = 10 } = req.query;
+    const query = { type: "Committee" };
 
-    if (type) query.type = type;
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: "i" } },
-        { type: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
       ];
     }
 
