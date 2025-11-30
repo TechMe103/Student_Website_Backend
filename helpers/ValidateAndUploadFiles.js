@@ -8,8 +8,6 @@ const validateAndUploadFiles = async (filesObj, fileConfigs) => {
     const uploadedFiles = {};
     const uploadedPublicIds = [];
 
-    console.log(filesObj);
-
     try {
         //  VALIDATION 
         for (let config of fileConfigs) {

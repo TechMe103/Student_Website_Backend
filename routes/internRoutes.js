@@ -7,10 +7,13 @@ const verifyToken =require ("../middlewares/VerifyToken");
 
 const upload=require("../middlewares/multer");
 
+const authenticateToken= require("../middlewares/authenticateToken");
+const authorizeRoles=require("../middlewares/authorizeRoles");
 
 // create internship
 router.post("/" , 
-    verifyToken , 
+    authenticateToken , 
+    authorizeRoles("admin", "student"),
     upload.fields([
         { name: "internshipReport", maxCount: 1 },
         { name: "photoProof", maxCount: 1 },
@@ -19,20 +22,21 @@ router.post("/" ,
 );
 
 //get all internships --admin
-router.get("/" , verifyToken, getInternships);
+router.get("/" , authenticateToken, authorizeRoles("admin"), getInternships);
 
 // get all internships of a student --student
-router.get("/me",verifyToken, getOwnInternships );
+router.get("/me",authenticateToken, authorizeRoles("student"), getOwnInternships );
 
 // get all internships of a student --admin
-router.get("/student-internship-by-admin/:studentId", verifyToken, getStudentInternshipsByAdmin);
+router.get("/student-internship-by-admin/:studentId", authenticateToken, authorizeRoles("admin"), getStudentInternshipsByAdmin);
 
 //can be used by both admin or student
-router.get("/:internshipId", verifyToken, getSingleInternship);
+router.get("/:internshipId", authenticateToken, authorizeRoles("admin", "student"), getSingleInternship);
 
 //update internship
 router.put("/:internshipId" ,
-    verifyToken, 
+    authenticateToken, 
+    authorizeRoles("admin", "student"),
     upload.fields([
         { name: "photoProof" }, 
         { name: "internshipReport" }
@@ -41,7 +45,7 @@ router.put("/:internshipId" ,
 );
 
 
-//del internship
-router.delete("/:internshipId" ,verifyToken, deleteInternship);
+//del internship --admin and student
+router.delete("/:internshipId" , authenticateToken, authorizeRoles("admin", "student"), deleteInternship);
 
 module.exports = router;
