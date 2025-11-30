@@ -31,7 +31,7 @@ const ALLOWED_PROOF_TYPES = ["image/jpeg", "image/jpg", "image/png"];
 const createInternship = async (req, res) => {
 
     let uploadedFiles;
-    let dbSaved=false; //flag to track if save to Db oprations succeeds or fails
+    let dbSaved=false; //flag to track if save to Db operations succeeds or fails
 
     try {
         const { id } = req.user;
@@ -88,7 +88,6 @@ const createInternship = async (req, res) => {
                 friendlyName: "Photo Proof"
             }
         ]);
-
         
 
         // Create Internship
@@ -128,9 +127,11 @@ const createInternship = async (req, res) => {
             await deleteMultipleFromCloudinary(publicIds);
         }
 
-        return res.status(500).json({ success: false, message: "Internal Server Error. Please Try Again Later" });
+        return res.status(500).json({ success: false, message: err.message || "Something went wrong. Please try again later." });
     }
 };
+
+
 
 // GET INTERNSHIPS (with optional pagination, search, year filter, and paid/unpaid filter)
 const getInternships = async (req, res) => {

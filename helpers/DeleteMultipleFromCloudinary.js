@@ -1,12 +1,7 @@
-// helpers/fileHandler.js
 const cloudinary = require("../config/cloudinaryConfig");
 
-/**
- * Bulk delete multiple Cloudinary files (production-level)
- * @param {Array<string>} publicIds - Cloudinary public IDs
- * @returns {Object} { deleted: [], failed: [] }
- */
 const deleteMultipleFromCloudinary = async (publicIds = []) => {
+
     // Filter out invalid IDs
     const validPublicIds = publicIds.filter(id => typeof id === "string" && id.trim() !== "");
 
@@ -35,6 +30,7 @@ const deleteMultipleFromCloudinary = async (publicIds = []) => {
 
     } catch (err) {
         console.error("Cloudinary bulk deletion error:", err);
+
         // If the whole bulk request fails, mark all as failed
         return {
             deleted: [],

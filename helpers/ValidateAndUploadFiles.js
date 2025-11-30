@@ -1,46 +1,70 @@
 const fs = require("fs").promises;
-const { uploadToCloudinary } = require("./UploadToCloudinary");
+const cloudinary = require("../config/cloudinaryConfig");
 const { deleteMultipleFromCloudinary } = require("./DeleteMultipleFromCloudinary");
 
-/**
- * Validate and upload multiple files atomically to Cloudinary
- * @param {Object} filesObj - object containing file arrays (e.g., req.files)
- * @param {Array} fileConfigs - array of objects defining { fieldName, allowedTypes, maxSize, friendlyName }
- * @returns {Object} - object containing uploaded files { fieldName: { url, publicId } }
- * @throws - if validation fails or upload fails (atomic rollback)
- */
+
+
 const validateAndUploadFiles = async (filesObj, fileConfigs) => {
     const uploadedFiles = {};
     const uploadedPublicIds = [];
 
+    console.log(filesObj);
+
     try {
+        //  VALIDATION 
         for (let config of fileConfigs) {
-            const { fieldName, allowedTypes, maxSize, friendlyName } = config;
+        const { fieldName, allowedTypes, maxSize, friendlyName } = config;
 
-            const file = filesObj?.[fieldName]?.[0];
-            if (!file) throw new Error(`${friendlyName} is required`);
+        const file = filesObj?.[fieldName]?.[0];
+        if (!file) throw new Error(`${friendlyName} is required`);
 
-            if (!allowedTypes.includes(file.mimetype)) {
-                throw new Error(`${friendlyName} must be of type: ${allowedTypes.join(", ")}`);
-            }
-
-            if (file.size > maxSize) {
-                throw new Error(`${friendlyName} exceeds ${maxSize / (1024 * 1024)}MB`);
-            }
-
-            // Upload file
-            const result = await uploadToCloudinary(file.path);
-            uploadedFiles[fieldName] = { url: result.url, publicId: result.publicId };
-            uploadedPublicIds.push(result.publicId);
+        if (!allowedTypes.includes(file.mimetype)) {
+            throw new Error(
+            `${friendlyName} must be one of: ${allowedTypes.join(", ")}`
+            );
         }
+
+        if (file.size > maxSize) {
+            throw new Error(
+            `${friendlyName} exceeds ${maxSize / (1024 * 1024)}MB`
+            );
+        }
+        }
+
+        //  PARALLEL UPLOAD 
+        const uploadPromises = fileConfigs.map(async (config) => {
+            const { fieldName } = config;
+            const file = filesObj?.[fieldName]?.[0];
+
+            try {
+                const result = await cloudinary.uploader.upload(file.path, {
+                folder: "studentWebsite",
+                });
+
+                uploadedFiles[fieldName] = {
+                url: result.secure_url,
+                publicId: result.public_id,
+                };
+
+                uploadedPublicIds.push(result.public_id);
+
+                // delete temp file
+                await fs.unlink(file.path).catch(() => {});
+
+            } catch (err) {
+                throw new Error(`Failed to upload ${fieldName}`);
+            }
+        });
+
+        await Promise.all(uploadPromises);
 
         return uploadedFiles;
 
     } catch (err) {
-        // Rollback all successfully uploaded files in case of error
-        await deleteMultipleFromCloudinary(uploadedPublicIds);
-        throw err;
+            //  ROLLBACK 
+            await deleteMultipleFromCloudinary(uploadedPublicIds);
+            throw err;
     }
 };
 
-module.exports = { validateAndUploadFiles, deleteMultipleFromCloudinary };
+module.exports = { validateAndUploadFiles };
