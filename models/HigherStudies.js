@@ -23,6 +23,11 @@ const higherStudiesSchema = new mongoose.Schema({
 		url: { type: String, required:true },      // Cloudinary secure URL
 		publicId: { type: String , required:true}, // Cloudinary public_id for deletion
 	},
+
+	idCardPhoto : {
+		url: { type: String },      // Cloudinary secure URL
+		publicId: { type: String }, // Cloudinary public_id for deletion
+	}
 },
 { timestamps: true });
 

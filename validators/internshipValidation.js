@@ -24,27 +24,24 @@ const internshipValidationSchema = Joi.object({
 
 
 const updateInternshipValidationSchema = Joi.object({
-    companyName: Joi.string().trim().min(2),
-
-    role: Joi.string().trim().min(2),
-
-    startDate: Joi.date(),
-
-    endDate: Joi.date().greater(Joi.ref("startDate")),
-
-    durationMonths: Joi.number().integer().min(1).max(6),
-
-    isPaid: Joi.boolean(),
-
+    companyName: Joi.string().trim().min(2).empty("").optional(),
+    role: Joi.string().trim().min(2).empty("").optional(),
+    startDate: Joi.date().optional(),
+    endDate: Joi.date().greater(Joi.ref("startDate")).optional(),
+    durationMonths: Joi.number().integer().min(1).max(6).optional(),
+    isPaid: Joi.boolean().optional(),
     stipend: Joi.when("isPaid", {
         is: true,
-        then: Joi.number().min(1),
+        then: Joi.number().min(1).optional(),
         otherwise: Joi.forbidden()
     }),
-
-    description: Joi.string().trim().min(10)
+    description: Joi.string().trim().min(10).empty("").optional()
+})
+.min(1) // At least one field is required
+.options({
+    stripUnknown: true,  // removes extra fields not in schema
+    convert: false        // prevent automatic string -> number conversion
 });
-
 
 const getInternshipsValidation = Joi.object({
   year: Joi.string().valid("SE", "TE", "BE").optional(),

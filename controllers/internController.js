@@ -360,11 +360,12 @@ const updateInternship = async (req, res) => {
 
         const { companyName, startDate, endDate, role, durationMonths, isPaid: isPaidRaw, stipend, description } = req.body;
 
-        const parsedDurationMonths = Number(durationMonths);
-        const parsedStipend = stipend ? Number(stipend) : undefined;
-        const parsedIsPaid = isPaidRaw === "true" || isPaidRaw === true;
+        const parsedDurationMonths = durationMonths !== undefined ? Number(durationMonths) : undefined;
+        const parsedStipend = stipend !== undefined ? Number(stipend) : undefined;
+        const parsedIsPaid = isPaidRaw !== undefined ? (isPaidRaw === "true" || isPaidRaw === true) : undefined;
 
-        const { error } = updateInternshipValidationSchema.validate(
+
+        const { error , value:updatedData } = updateInternshipValidationSchema.validate(
             { companyName, startDate, endDate, role, durationMonths: parsedDurationMonths, isPaid: parsedIsPaid, stipend: parsedStipend, description },
             { abortEarly: false }
         );
@@ -385,15 +386,7 @@ const updateInternship = async (req, res) => {
         const stipendInfo = { isPaid: parsedIsPaid };
         if (parsedIsPaid) stipendInfo.stipend = parsedStipend;
 
-        const updatedData = {
-            companyName,
-            startDate,
-            endDate,
-            role,
-            durationMonths: parsedDurationMonths,
-            description,
-            stipendInfo
-        };
+
 
         /* ---------------------- FILE HANDLING LOGIC ---------------------- */
 
