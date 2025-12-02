@@ -9,6 +9,7 @@ const upload=require("../middlewares/multer");
 
 const authenticateToken= require("../middlewares/authenticateToken");
 const authorizeRoles=require("../middlewares/authorizeRoles");
+const trimRequestBodyStrings=require("../middlewares/trimRequestBodyStrings");
 
 // create internship
 router.post("/" , 
@@ -18,20 +19,21 @@ router.post("/" ,
         { name: "internshipReport", maxCount: 1 },
         { name: "photoProof", maxCount: 1 },
     ]), 
+    trimRequestBodyStrings,
     createInternship
 );
 
 //get all internships --admin
-router.get("/" , authenticateToken, authorizeRoles("admin"), getInternships);
+router.get("/" , authenticateToken, authorizeRoles("admin"), trimRequestBodyStrings, getInternships);
 
 // get all internships of a student --student
-router.get("/me",authenticateToken, authorizeRoles("student"), getOwnInternships );
+router.get("/me",authenticateToken, authorizeRoles("student"), trimRequestBodyStrings, getOwnInternships );
 
 // get all internships of a student --admin
-router.get("/student-internship-by-admin/:studentId", authenticateToken, authorizeRoles("admin"), getStudentInternshipsByAdmin);
+router.get("/student-internship-by-admin/:studentId", authenticateToken, authorizeRoles("admin"), trimRequestBodyStrings, getStudentInternshipsByAdmin);
 
 //can be used by both admin or student
-router.get("/:internshipId", authenticateToken, authorizeRoles("admin", "student"), getSingleInternship);
+router.get("/:internshipId", authenticateToken, authorizeRoles("admin", "student"), trimRequestBodyStrings, getSingleInternship);
 
 //update internship
 router.put("/:internshipId" ,
@@ -41,11 +43,12 @@ router.put("/:internshipId" ,
         { name: "photoProof" }, 
         { name: "internshipReport" }
     ]),
+    trimRequestBodyStrings,
     updateInternship
 );
 
 
 //del internship --admin and student
-router.delete("/:internshipId" , authenticateToken, authorizeRoles("admin", "student"), deleteInternship);
+router.delete("/:internshipId" , authenticateToken, authorizeRoles("admin", "student"), trimRequestBodyStrings, deleteInternship);
 
 module.exports = router;

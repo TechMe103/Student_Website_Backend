@@ -271,18 +271,16 @@ const getStudentInternshipsByAdmin = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid internship ID format"});
         }
 
-        // Verify student exists
-        const studentExists = await Student.findById(studentId);
-        if (!studentExists) {
-            return res.status(404).json({ success: false, message: "Student not found" });
-        }
-
         const internships = await Internship.find({ stuID: studentId })
             .populate({
                 path: "stuID",
                 select: "name branch year"  // only these fields
             })
             .sort({ startDate: -1 });
+
+        if(!internships){
+            return res.status(400).json({ success: false, message: "No internships founf for this student. If any doubt, please check student ID sent."});
+        }
 
         return res.status(200).json({ success: true, data: internships });
     } catch (err) {
@@ -299,12 +297,12 @@ const getSingleInternship = async (req, res) => {
     try {
         const { internshipId } = req.params;
 
-        if (!mongoose.Types.ObjectId.isValid(internshipId)) {
-            return res.status(400).json({ success: false, message: "Invalid internship ID format"});
-        }
-        
         if (!internshipId) {
             return res.status(400).json({ success: false, message: "Internship ID is required" });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(internshipId)) {
+            return res.status(400).json({ success: false, message: "Invalid internship ID format"});
         }
 
 
@@ -340,6 +338,10 @@ const updateInternship = async (req, res) => {
     try {
 
         const { internshipId } = req.params;
+
+        if (!internshipId) {
+            return res.status(400).json({ success: false, message: "Internship ID is required" });
+        }
 
         if (!mongoose.Types.ObjectId.isValid(internshipId)) {
             return res.status(400).json({ success: false, message: "Invalid internship ID format" });
@@ -476,6 +478,10 @@ const deleteInternship = async (req, res) => {
         const userId=req.user.id; //its ok if request is from student or admin, as both can delete or update , but user has to exist compulsory
 
         const { internshipId } = req.params;
+
+        if(!internshipId){
+            return res.status(400).json({ success: false, message: "internship ID required"});
+        }
 
         if (!mongoose.Types.ObjectId.isValid(internshipId)) {
             return res.status(400).json({ success: false, message: "Invalid internship ID format"});

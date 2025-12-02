@@ -39,40 +39,45 @@ const yearPattern = /^\d{4}-\d{2}$/;
 // CREATE
 const createPlacementSchema = Joi.object({
 
-	companyName: Joi.string().trim().required(),
+	companyName: Joi.string().trim().min(1).required(),
 
-	role: Joi.string().trim().required(),
+	role: Joi.string().trim().min(1).required(),
 
 	placementType: Joi.string().valid("Campus", "Off-Campus").required(),
 
-	package: Joi.number().positive().required(),
+	package: Joi.number().positive().min(1).required(),
 
-	placementYear: Joi.string().pattern(yearPattern).required(),
+	placementYear: Joi.string().min(1).pattern(yearPattern).required(),
 
-	passoutYear: Joi.string().pattern(yearPattern).required(),
+	passoutYear: Joi.string().min(1).pattern(yearPattern).required(),
 
-	joiningYear: Joi.string().pattern(yearPattern).required(),
+	joiningYear: Joi.string().min(1).pattern(yearPattern).required(),
 });
 
 
 // UPDATE
 const updatePlacementSchema = Joi.object({
-	
-	companyName: Joi.string().trim(),
 
-	role: Joi.string().trim(),
+	companyName: Joi.string().trim().min(1).empty("").optional(),
 
-	placementType: Joi.string().valid("Campus", "Off-Campus"),
+	role: Joi.string().trim().min(1).empty("").optional(),
 
-	package: Joi.number().positive(),
+	placementType: Joi.string().valid("Campus", "Off-Campus").empty("").optional(),
 
-	placementYear: Joi.string().pattern(yearPattern),
+	package: Joi.number().positive().min(1).empty("").optional(),
 
-	passoutYear: Joi.string().pattern(yearPattern),
+	placementYear: Joi.string().pattern(yearPattern).empty("").optional(),
 
-	joiningYear: Joi.string().pattern(yearPattern),
+	passoutYear: Joi.string().pattern(yearPattern).empty("").optional(),
 
-}).min(1); // at least one field is required to update
+	joiningYear: Joi.string().pattern(yearPattern).empty("").optional(),
+
+}).min(1)	// at least one field is required to update
+.options({
+	stripUnknown: true,   // removes extra fields
+	convert: false,         // string -> number conversion not allowed
+	abortEarly: false
+}); 
 
 
 // GET / FILTER
