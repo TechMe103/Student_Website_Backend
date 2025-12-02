@@ -4,88 +4,115 @@ const Admin = require("../models/Admin");
 const cloudinary = require("../config/cloudinaryConfig");
 const { uploadToCloudinary } = require("../helpers/UploadToCloudinary");
 const {createPlacementSchema, updatePlacementSchema, getPlacementsValidation} = require("../validators/placementValidation");
+const { deleteMultipleFromCloudinary } = require("../helpers/DeleteMultipleFromCloudinary");
+const { validateAndUploadFiles } = require("../helpers/ValidateAndUploadFiles");
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_REPORT_TYPE = "application/pdf";
 
-// --------------------------- CREATE PLACEMENT (student) --------------------------- //
+
+
+const fileConfigs = [
+  {
+    fieldName: "placementProof",
+    allowedTypes: ["application/pdf"],
+    maxSize: 5 * 1024 * 1024,
+    friendlyName: "Placement Proof"
+  }
+];
+
+// CREATE PLACEMENT 
 const createPlacement = async (req, res) => {
 
-	let dbSaved=false;
-	let uploadResult=null;
+	let uploadedFiles;
+	let dbSaved = false;
+
 	try {
-		const { id } = req.user; 
+		let stuID;
 
-		const student = await Student.findById(id);
-		if (!student) {
-			return res.status(404).json({ success: false, message: "Student not found" });
+		if (req.user.role === "student") {
+		stuID = req.user.id;
+		} 
+		else if (req.user.role === "admin") {
+			stuID = req.body.studentId;
+
+			const student = await Student.findById(stuID);
+			if (!student) {
+				return res.status(404).json({ success: false, message: "Student not found. Cannot create placement." });
+			}
 		}
 
-		const { companyName, role, placementType } = req.body;
+		const { companyName, role, placementType, package, placementYear, passoutYear, joiningYear } = req.body;
 
-		// Validate required fields
-		if (!companyName || !role || !placementType) {
-		return res.status(400).json({ success: false, message: "All fields are required" });
-		}
+		// convert
+		const parsedPackage = Number(package);
 
-		// Validate input using Joi
-		const { error } = createPlacementSchema.validate({ companyName, role, placementType }, { abortEarly: false });
+		// Joi Validation
+		const { error } = createPlacementSchema.validate({
+			companyName,
+			role,
+			placementType,
+			package: parsedPackage,
+			placementYear,
+			passoutYear,
+			joiningYear
+		}, { abortEarly: false });
+
 		if (error) {
 			const validationErrors = error.details.map(err => ({
 				field: err.path[0],
 				message: err.message
 			}));
 
-			return res.status(400).json({
-				success: false,
-				message: "Validation failed",
-				errors: validationErrors
-			});
+			return res.status(400).json({ success: false, message: "Validation failed", errors: validationErrors });
 		}
 
-		// Upload proof file to Cloudinary
-		const placementProofFile = req.file;
-		if (!placementProofFile) {
-			return res.status(400).json({ success: false, message: "Placement proof is required" });
+		// Logical year validation
+		const extractStartYear = (year) => Number(year.split("-")[0]);
+
+		if (extractStartYear(placementYear) > extractStartYear(joiningYear)) {
+			return res.status(400).json({ success: false, message: "Placement Year cannot be greater than Joining Year" });
 		}
 
-		if (placementProofFile.mimetype !== ALLOWED_REPORT_TYPE){
-            return res.status(400).json({ success: false, message: "Placement Proof must be a PDF" });
-        }
+		// Upload & Validate File via Helper
+		uploadedFiles = await validateAndUploadFiles(req.files, fileConfigs);
 
-        if (placementProofFile.size > MAX_FILE_SIZE){
-            return res.status(400).json({ success: false, message: "Placement Proof exceeds 5MB" });
-        }
-
-		uploadResult = await uploadToCloudinary(placementProofFile.path);
-
-		// Create Placement record
+		// Create Placement in DB
 		const placement = new Placement({
-			stuID: id,
+			stuID,
 			companyName,
 			role,
 			placementType,
+			package: parsedPackage,
+			placementYear,
+			passoutYear,
+			joiningYear,
 			placementProof: {
-				url: uploadResult.url,
-				publicId: uploadResult.publicId,
-			},
+				url: uploadedFiles.placementProof.url,
+				publicId: uploadedFiles.placementProof.publicId
+			}
 		});
 
 		await placement.save();
-		dbSaved=true;
+		dbSaved = true;
 
-		res.status(201).json({ success: true, message: "Placement added successfully", placement });
+		return res.status(201).json({ success: true, message: "Placement added successfully", placement });
+
 	} catch (err) {
 		console.error("Error in createPlacement:", err);
-		// if save to DB operation fails, then files stored in cloudinary must be deleted, as files are useless now
-		if (!dbSaved && uploadResult) {
-			if (uploadResult.publicId) await cloudinary.uploader.destroy(uploadResult.publicId);
+
+		// Rollback cloudinary upload if DB save fails
+		if (!dbSaved && uploadedFiles) {
+			const publicIds = Object.values(uploadedFiles).map(file => file.publicId);
+			await deleteMultipleFromCloudinary(publicIds);
 		}
-		return res.status(500).json({ success: false, message: "Internal Server Error" });
+
+		return res.status(500).json({ success: false, message: err.message || "Some Error Occured. Please try again later." });
 	}
 };
 
-// --------------------------- UPDATE PLACEMENT --------------------------- //
+
+// UPDATE PLACEMENT //
 const updatePlacement = async (req, res) => {
 	let uploadResult=null;
 	let dbSaved=false;
@@ -188,7 +215,7 @@ const updatePlacement = async (req, res) => {
 	}
 };
 
-// --------------------------- DELETE PLACEMENT --------------------------- //
+// DELETE PLACEMENT //
 const deletePlacement = async (req, res) => {
 	try {
 		const userId = req.user.id;
@@ -361,7 +388,7 @@ const getPlacements = async (req, res) => {
 
 
 
-// --------------------------- GET STUDENT'S OWN PLACEMENTS --------------------------- //
+// GET STUDENT'S OWN PLACEMENTS //
 const getOwnPlacements = async (req, res) => {
 	try {
 		const studentId = req.user.id;
@@ -379,7 +406,7 @@ const getOwnPlacements = async (req, res) => {
 	}
 };
 
-// --------------------------- GET STUDENT'S PLACEMENTS (ADMIN VIEW) --------------------------- //
+// GET STUDENT'S PLACEMENTS (ADMIN VIEW) //
 const getStudentPlacementsByAdmin = async (req, res) => {
 	try {
 		const adminId = req.user.id;
@@ -406,7 +433,7 @@ const getStudentPlacementsByAdmin = async (req, res) => {
 	}
 };
 
-// --------------------------- GET SINGLE PLACEMENT --------------------------- //
+// GET SINGLE PLACEMENT //
 const getSinglePlacement = async (req, res) => {
   try {
 		const userId=req.user.id; 
@@ -444,7 +471,7 @@ const getSinglePlacement = async (req, res) => {
 	}
 };
 
-// --------------------------- EXPORTS --------------------------- //
+// EXPORTS //
 module.exports = {
   createPlacement,
   updatePlacement,

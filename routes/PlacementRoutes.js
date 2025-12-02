@@ -13,7 +13,7 @@ const upload=require("../middlewares/multer");
 // Create Placement (Student only)
 router.post("/",
     verifyToken,
-    upload.single("placementProof"),
+    upload.fields([{ name: "placementProof", maxCount: 1 }]),
     createPlacement
 );
 
@@ -21,18 +21,18 @@ router.post("/",
 router.put(
     "/:placementId",
     verifyToken,
-    upload.single("placementProof"),
+    upload.fields([{ name: "placementProof", maxCount: 1 }]),
     updatePlacement
 );
 
 // Delete Placement (Admin or Student)
 router.delete("/:placementId", verifyToken, deletePlacement);
 
-// Get All Placements (Admin only)
-router.get("/", verifyToken, getPlacements);
-
 // Get Logged-in Student’s Own Placements
 router.get("/me", verifyToken, getOwnPlacements);
+
+// Get All Placements (Admin only)
+router.get("/", verifyToken, getPlacements);
 
 // Get Placements of Specific Student (Admin)
 router.get("/student-placement-by-admin/:studentId", verifyToken, getStudentPlacementsByAdmin);
