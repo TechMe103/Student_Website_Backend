@@ -76,6 +76,10 @@ const createInternship = async (req, res) => {
         const stipendInfo = { isPaid: parsedIsPaid };
         if (parsedIsPaid) stipendInfo.stipend = parsedStipend;
 
+        if (!req.files || Object.keys(req.files).length === 0) {
+			return res.status(400).json({ success: false, message: "Photo Proof and Internship Report are required." });
+		}
+
 
         uploadedFiles = await validateAndUploadFiles(req.files, fileConfigs);
         
@@ -161,7 +165,10 @@ const getInternships = async (req, res) => {
         });
 
         // Unwind student array
-        pipeline.push({ $unwind: "$student" });
+        pipeline.push({ $unwind: {
+            path: "$student",
+            preserveNullAndEmptyArrays: true
+        } });
 
         // Build match conditions
         const match = {};
@@ -278,7 +285,7 @@ const getStudentInternshipsByAdmin = async (req, res) => {
             })
             .sort({ startDate: -1 });
 
-        if(!internships){
+        if(internships.length===0){
             return res.status(400).json({ success: false, message: "No internships founf for this student. If any doubt, please check student ID sent."});
         }
 
@@ -508,7 +515,11 @@ const deleteInternship = async (req, res) => {
             await Internship.findByIdAndDelete(internshipId);
 
             // 5. Delete files from Cloudinary (helper handles errors internally)
-            await deleteMultipleFromCloudinary(publicIdsToDelete);
+            try{
+                await deleteMultipleFromCloudinary(publicIdsToDelete);
+            }catch(err){
+                console.error(err);
+            }
 
             
         return res.status(200).json({ success: true, message: "Internship deleted successfully" });

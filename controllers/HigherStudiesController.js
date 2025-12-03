@@ -50,6 +50,10 @@ const createHigherStudy = async (req, res) => {
             return res.status(400).json({ success: false, message: "Validation failed", errors: validationErrors });
         }
 
+        if (!req.files || Object.keys(req.files).length === 0) {
+			return res.status(400).json({ success: false, message: "Marksheet and Id card Photo required." });
+		}
+
         uploadedFiles = await validateAndUploadFiles(req.files, fileConfigs);
 
         const higherStudy = new HigherStudies({
@@ -119,7 +123,11 @@ const getHigherStudies = async (req, res) => {
 
         const pipeline = [
             { $lookup: { from: "students", localField: "stuID", foreignField: "_id", as: "student" } },
-            { $unwind: "$student" }
+            { $unwind: {
+                path: "$student",
+                preserveNullAndEmptyArrays: true
+                } 
+            }
         ];
 
         const match = {};
@@ -267,7 +275,12 @@ const deleteHigherStudy = async (req, res) => {
         if (study.idCardPhoto?.publicId) publicIdsToDelete.push(study.idCardPhoto.publicId);
 
         await HigherStudies.findByIdAndDelete(higherStudyId);
-        await deleteMultipleFromCloudinary(publicIdsToDelete);
+
+        try{
+            await deleteMultipleFromCloudinary(publicIdsToDelete);
+        }catch(err){
+            console.error(err);
+        }
 
         return res.status(200).json({ success: true, message: "Higher study record deleted." });
     } catch (err) {

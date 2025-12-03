@@ -260,9 +260,16 @@ const deletePlacement = async (req, res) => {
 		
 
 		const { placementId } = req.params;
+
+
+		if (!placementId || !mongoose.Types.ObjectId.isValid(placementId)) {
+			return res.status(400).json({ success: false, message: "Invalid Placement ID" });
+		}
+
 		const placement = await Placement.findById(placementId);
+
 		if (!placement) {
-			return res.status(404).json({ success: false, message: "Placement not found" });
+			return res.status(404).json({ success: false, message: "Invalid Placement ID" });
 		}
 
 		if (req.user.role === "student") {
@@ -278,10 +285,12 @@ const deletePlacement = async (req, res) => {
 		
 
 		// Delete Cloudinary proof file
-		if ( delResult && placement.placementProof?.publicId) {
-			await cloudinary.uploader.destroy(placement.placementProof.publicId).catch((err) =>{
+		if ( delResult?.placementProof?.publicId) {
+			try{
+				await cloudinary.uploader.destroy(delResult.placementProof.publicId)
+			}catch(err){
 				console.error("Cloudinary delete failed:", err);
-			});
+			}
 		}
 
 		

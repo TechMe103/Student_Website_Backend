@@ -6,6 +6,9 @@ const verifyToken =require ("../middlewares/VerifyToken");
 const upload = require("../middlewares/multer");
 const trimRequestBodyStrings= require("../middlewares/trimRequestBodyStrings");
 
+const authenticateToken= require("../middlewares/authenticateToken");
+const authorizeRoles=require("../middlewares/authorizeRoles");
+
 
 // route to add excel file and then send generated passwords via email --admin access
 router.post('/import', verifyToken ,uploadExcel.single("studentData"), importExcelDataWithPasswords );
@@ -14,18 +17,30 @@ router.post('/import', verifyToken ,uploadExcel.single("studentData"), importExc
 router.get("/export-students", verifyToken, exportAllStudentsToExcel);
 
 // route to add remaining details --student
-router.post('/', verifyToken ,upload.single("studentPhoto"), trimRequestBodyStrings, addStudentDetails );
+router.post('/',    
+    authenticateToken , 
+    authorizeRoles("admin", "student"),
+    upload.fields([{ name: "studentPhoto", maxCount: 1 }]),
+    trimRequestBodyStrings,
+    addStudentDetails 
+);
 
 //route to update remaining details --student & admin
-router.put("/:studentId", verifyToken, upload.single("studentPhoto"), trimRequestBodyStrings, updateStudent);
+router.put("/:studentId",
+    authenticateToken , 
+    authorizeRoles("admin", "student"),
+    upload.fields([{ name: "studentPhoto", maxCount: 1 }]),
+    trimRequestBodyStrings,
+    updateStudent
+);
 
 // route to delete student --student & admin
-router.delete("/:studentId", verifyToken, deleteStudent);
+router.delete("/:studentId", authenticateToken, authorizeRoles("admin", "student"), deleteStudent);
 
 // GET routes
-router.get("/", verifyToken, getStudents);  // Admin onnly --with search, filter and pagination
-router.get("/me", verifyToken, getStudentById); // Student self
-router.get("/:studentId", verifyToken, getSingleStudent); // Admin only
+router.get("/", authenticateToken, authorizeRoles("admin"), getStudents);  // Admin onnly --with search, filter and pagination
+router.get("/me", authenticateToken, authorizeRoles("student"), getStudentById); // Student self
+router.get("/:studentId", authenticateToken, authorizeRoles("admin"), getSingleStudent); // Admin only
 
 
 module.exports = router;

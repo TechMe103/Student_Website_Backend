@@ -17,6 +17,8 @@ const { importExcelSchema, addStudentDetailsSchema, updateStudentSchema, getStud
 
 const cascadeDeleteStudent = require("../helpers/cascadeDeleteStudent");
 
+const { validateAndUploadFiles } = require("../helpers/ValidateAndUploadFiles");
+
 // Configure your email transporter (example with Gmail)
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -30,6 +32,16 @@ const transporter = nodemailer.createTransport({
 const generateRandomPassword = (length = 14) => {
   return crypto.randomBytes(length).toString("base64").slice(0, length);
 };
+
+
+const fileConfigs =[
+	{
+		fieldName: "studentPhoto",
+		allowedTypes: ["image/jpeg", "image/png", "image/jpg"],
+		maxSize: 5 * 1024 * 1024,
+		friendlyName: "Student Photo"
+	},
+];
 
 const importExcelDataWithPasswords = async (req, res) => {
 	try {
@@ -45,19 +57,19 @@ const importExcelDataWithPasswords = async (req, res) => {
 		return res.status(400).json({ success: false, message: "No file uploaded" });
 		}
 
-		// 1️⃣ Read Excel file
+		// Read Excel file
 		const workbook = xlsx.readFile(req.file.path);
 		const sheetName = workbook.SheetNames[0];
 		const sheet = workbook.Sheets[sheetName];
 
-		// 2️⃣ Convert Excel sheet to JSON
+		// Convert Excel sheet to JSON
 		const rawData = xlsx.utils.sheet_to_json(sheet);
 
 		if (rawData.length === 0) {
 		return res.status(400).json({ success: false, message: "Excel file is empty" });
 		}
 
-		// 3️⃣ Extract studentID & email
+		// Extract studentID & email
 		const filteredData = rawData
 		.map((row) => ({
 			studentID: row.studentID || row.StudentID || row["Student ID"] || "",
@@ -72,7 +84,7 @@ const importExcelDataWithPasswords = async (req, res) => {
 		});
 		}
 
-		// 4️⃣ For each student: generate, hash, save, and email
+		// For each student: generate, hash, save, and email
 		let successCount = 0;
 		let failedStudents = [];
 
@@ -125,7 +137,7 @@ const importExcelDataWithPasswords = async (req, res) => {
 			}
 		}
 
-		// 5️⃣ Delete uploaded file
+		// Delete uploaded file
 		fs.unlinkSync(req.file.path);
 
 		res.status(200).json({
@@ -203,7 +215,7 @@ const exportAllStudentsToExcel = async (req, res) => {
     xlsx.writeFile(workbook, filePath);
 
     // 5. Send file to user for download
-    res.download(filePath, "StudentsData.xlsx", (err) => {
+    return res.download(filePath, "StudentsData.xlsx", (err) => {
       if (err) {
         console.error("Error while downloading file:", err);
         res.status(500).json({ success: false, message: "File download failed" });
@@ -216,7 +228,7 @@ const exportAllStudentsToExcel = async (req, res) => {
     });
   } catch (error) {
     console.error("Error exporting students to Excel:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Internal server error while exporting data.",
     });
@@ -224,117 +236,144 @@ const exportAllStudentsToExcel = async (req, res) => {
 };
 
 
-// Add remaining Details from schema --for student
-const addStudentDetails = async (req,res)=>{
-	
-	let dbSaved=false;	//flag to track if save to Db oprations succeeds or fails
+// Add remaining Details from schema --for student or admin
+const addStudentDetails = async (req, res) => {
+    let uploadedFiles = null;
+    let dbSaved = false;
 
-	let uploadResult=null;
+    try {
+        let studentId;
 
-	try {
-		const studentId = req.user.id;
+        if (req.user.role === "student") {
 
+            studentId = req.user.id;
 
-		const student = await Student.findById(studentId);
-		if (!student) {
-			return res.status(404).json({ success: false, message: "Student not found" });
-		}
-		
+        } else if (req.user.role === "admin") {
 
-		// Destructure fields from request body
-		const {firstName, middleName, lastName, motherName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, pincode, nativeStreet, nativeCity, nativePincode, category, mobileNo, parentMobileNo } = req.body;
+            studentId = req.body.studentId;
+			if (!studentId) {
+                return res.status(400).json({ success: false, message: "Student ID is required for admin" });
+            }
 
+			if (!mongoose.Types.ObjectId.isValid(studentId)) {
+                return res.status(400).json({ success: false, message: "Invalid Student ID format" });
+            }
 
-		// Basic required field check
-		if (!firstName || !middleName || !lastName || !motherName || !PRN || !branch || !year || !dob || !bloodGroup || !currentStreet || !currentCity || !pincode || !nativeStreet || !nativeCity || !nativePincode || !category || !mobileNo || !parentMobileNo) {
-			return res.status(400).json({ success: false, message: "All fields are required" });
-		}
+            const studentExists = await Student.findById(studentId);
+            if (!studentExists) {
+                return res.status(404).json({ success: false, message: "Student not found" });
+            }
 
-
-		if(!req.file){
-			return res.status(400).json({ success: false, message: "Student Photo required" });
-		}
-
-		
-
-		// Validate input using Joi
-		const { error, value } = addStudentDetailsSchema.validate({firstName, middleName, lastName, motherName, PRN, branch, year, dob, bloodGroup, currentStreet, currentCity, pincode, nativeStreet, nativeCity, nativePincode, category, mobileNo, parentMobileNo }, { abortEarly: false });
-		if (error) {
-			const validationErrors = error.details.map(err => ({
-				field: err.path[0],
-				message: err.message
-			}));
-
-			return res.status(400).json({
-				success: false,
-				message: "Validation failed",
-				errors: validationErrors
-			});
+		}else{
+			return res.status(401).json({ success: false, message: "Unauthorized access" });
 		}
 
-		// Convert dob string to Date before saving
-		const dobDate = new Date(dob);
 
-		
+        // Validate input using Joi
+        const { error, value } = addStudentDetailsSchema.validate(req.body, {
+            abortEarly: false,
+            stripUnknown: true,
+            convert: true
+        });
 
-		let studentPhoto = null;
-        if (req.file) {
-            uploadResult = await uploadToCloudinary(req.file.path);
-			if(!uploadResult){
-				return res.status(500).json({success:false, message: "Photo upload failed, Please try again later"});
-			}
-            studentPhoto = {
-                url: uploadResult.url,
-                publicId: uploadResult.publicId
-            };
+        if (error) {
+            const validationErrors = error.details.map(err => ({
+                field: err.path[0],
+                message: err.message
+            }));
+
+            return res.status(400).json({ success: false, message: "Validation failed", errors: validationErrors });
         }
 
-		//Build nested object for name
-		const name = {
-			firstName,
-			middleName,
-			lastName,
-			motherName
+        // Check if file is uploaded
+        if (!req.files || Object.keys(req.files).length === 0) {
+			return res.status(400).json({ success: false, message: "Student Photo is required" });
 		}
 
-		// Build nested objects for addresses
-		const currentAddress = {
-			street: currentStreet,
-			city: currentCity,
-			pincode: pincode
-		};
+        // Upload & validate file using helper
+        uploadedFiles = await validateAndUploadFiles(req.files, fileConfigs);
 
-		const nativeAddress = {
-			street: nativeStreet,
-			city: nativeCity,
-			nativePincode: nativePincode
-		};
+        const studentPhoto = {
+            url: uploadedFiles.studentPhoto.url,
+            publicId: uploadedFiles.studentPhoto.publicId
+        };
 
-		// Update the existing student
-		const studentWithAddedDetails = await Student.findByIdAndUpdate(
-			studentId, { name, PRN, branch, year, dob : dobDate, bloodGroup, currentAddress, nativeAddress, category, mobileNo, parentMobileNo, studentPhoto},{ new: true } // Return the updated document
-		);
-		dbSaved=true;
+        // Build nested objects
+        const name = {
+            firstName: value.firstName,
+            middleName: value.middleName,
+            lastName: value.lastName,
+            motherName: value.motherName
+        };
 
-		res.status(201).json({ success: true, data: studentWithAddedDetails, message: "Added details successfully!" });
-	} catch (err) {
-		console.error("Error in createPersonalDetail:", err);
+        const currentAddress = {
+            street: value.currentStreet,
+            city: value.currentCity,
+            pincode: value.pincode
+        };
 
-		// if Db update failed, then delete photo uploaded to cloudinary
-		if(!dbSaved){
-			await cloudinary.uploader.destroy(uploadResult.publicId);
-		}
-		res.status(500).json({ success: false, message: "Internal Server Error" });
-	}
+        const nativeAddress = {
+            street: value.nativeStreet,
+            city: value.nativeCity,
+            nativePincode: value.nativePincode
+        };
+
+        // Update student in DB
+        const updatedStudent = await Student.findByIdAndUpdate(
+            studentId,
+            {
+                name,
+                PRN: value.PRN,
+                branch: value.branch,
+                year: value.year,
+                dob: value.dob,
+                bloodGroup: value.bloodGroup,
+                currentAddress,
+                nativeAddress,
+                category: value.category,
+                mobileNo: value.mobileNo,
+                parentMobileNo: value.parentMobileNo,
+                parentEmail: value.parentEmail,
+                abcId: value.abcId,
+                studentPhoto
+            },
+            { new: true }
+        );
+
+        dbSaved = true;
+
+        return res.status(201).json({ success: true, message: "Student details added successfully", data: updatedStudent });
+
+    } catch (err) {
+        console.error("Error in addStudentDetails:", err);
+
+        // Rollback uploaded file if DB save fails
+        if (!dbSaved && uploadedFiles) {
+            const publicIds = Object.values(uploadedFiles).map(file => file.publicId);
+            await deleteMultipleFromCloudinary(publicIds);
+        }
+
+        return res.status(500).json({ success: false, message: err.message || "Internal Server Error" });
+    }
 };
 
-// ==================== UPDATE STUDENT ====================
-const updateStudent = async (req, res) => {
+
+// UPDATE STUDENT --student or admin
+const updateStudentOld = async (req, res) => {
 	let dbSaved=false;
 	let uploadResult=null;
+	let studentId;
 	try {
-		const { studentId } = req.params;
-		const userId = req.user.id;
+	
+		if (req.user.role === "admin") {
+			studentId=req.params.studentId;
+		} else if (req.user.role === "student") {
+			studentId=req.user.id;
+		}
+
+		if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
+			return res.status(400).json({ success:false, message: "Student ID required in valid format." });
+		}
 
 		const student = await Student.findById(studentId);
 
@@ -342,20 +381,13 @@ const updateStudent = async (req, res) => {
 			return res.status(404).json({ success: false, message: "Student not found" });
 		}
 
-		// Verify requester
-		if (req.user.role === "admin") {
-			const adminExists = await Admin.findById(userId);
-			if (!adminExists) {
-				return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-			}
-		} else if (req.user.role === "student") {
+		// Verify requester-resource relate
+		if (req.user.role === "student") {
 
 			if(student._id.toString() !== userId.toString()){
 				return res.status(403).json({ success: false, message: "Resource does not belong to logged in student" });
 			}
 	
-		}else{
-			return res.status(400).json({success:false, message: "Bad Request"});
 		}
 
 		//for dealing with updated studentPhoto later
@@ -451,91 +483,204 @@ const updateStudent = async (req, res) => {
 			console.error("Old photo deletion failed:", err.message);
 		}
 
-		res.status(200).json({ success: true, message: "Student updated successfully", data: updatedStudent });
+		return res.status(200).json({ success: true, message: "Student updated successfully", data: updatedStudent });
 	} catch (err) {
 		console.error("Error in updateStudent:", err);
 		if(!dbSaved && uploadResult.publicId){
 			await cloudinary.uploader.destroy(uploadResult.publicId);
 		}
-		res.status(500).json({ success: false, message: "Internal Server Error" });
+		return res.status(500).json({ success: false, message: "Internal Server Error" });
 	}
 };
 
-// ==================== DELETE STUDENT ====================
+
+// UPDATE STUDENT -- student or admin
+const updateStudent = async (req, res) => {
+    let dbSaved = false;
+    let uploadedFiles = null;
+    let studentId;
+
+    try {
+        // Determine studentId based on role
+        if (req.user.role === "admin") {
+            studentId = req.params.studentId; // fixed typo from studentIdl
+        } else if (req.user.role === "student") {
+            studentId = req.user.id;
+        }
+
+        if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
+            return res.status(400).json({ success: false, message: "Student ID required in valid format." });
+        }
+
+        const student = await Student.findById(studentId);
+        if (!student) {
+            return res.status(404).json({ success: false, message: "Student not found" });
+        }
+
+        // Verify requester-resource relation
+        if (req.user.role === "student" && student._id.toString() !== req.user.id.toString()) {
+            return res.status(403).json({ success: false, message: "Resource does not belong to logged-in student" });
+        }
+
+        // Ensure student already has a photo
+        if (!student.studentPhoto || !student.studentPhoto.publicId) {
+            return res.status(400).json({
+                success: false,
+                message: "Please fill the details first. You cannot update without uploading a profile photo initially."
+            });
+        }
+
+        const oldPublicId = student.studentPhoto.publicId;
+
+        // Validate input
+        const { error, value } = updateStudentSchema.validate(req.body, { abortEarly: false, stripUnknown: true, convert: true });
+        if (error) {
+            const validationErrors = error.details.map(err => ({
+                field: err.path[0],
+                message: err.message
+            }));
+            return res.status(400).json({ success: false, message: "Validation failed", errors: validationErrors });
+        }
+
+        // Prepare updated data
+        const updatedData = {};
+
+        // Name fields
+        if (value.firstName) updatedData["name.firstName"] = value.firstName;
+        if (value.middleName) updatedData["name.middleName"] = value.middleName;
+        if (value.lastName) updatedData["name.lastName"] = value.lastName;
+        if (value.motherName) updatedData["name.motherName"] = value.motherName;
+
+        // Current Address
+        if (value.currentStreet) updatedData["currentAddress.street"] = value.currentStreet;
+        if (value.currentCity) updatedData["currentAddress.city"] = value.currentCity;
+        if (value.pincode) updatedData["currentAddress.pincode"] = value.pincode;
+
+        // Native Address
+        if (value.nativeStreet) updatedData["nativeAddress.street"] = value.nativeStreet;
+        if (value.nativeCity) updatedData["nativeAddress.city"] = value.nativeCity;
+        if (value.nativePincode) updatedData["nativeAddress.nativePincode"] = value.nativePincode;
+
+        // Other fields
+        if (value.PRN) updatedData.PRN = value.PRN;
+        if (value.branch) updatedData.branch = value.branch;
+        if (value.year) updatedData.year = value.year;
+        if (value.dob) updatedData.dob = new Date(value.dob);
+        if (value.bloodGroup) updatedData.bloodGroup = value.bloodGroup;
+        if (value.category) updatedData.category = value.category;
+        if (value.mobileNo) updatedData.mobileNo = value.mobileNo;
+        if (value.parentMobileNo) updatedData.parentMobileNo = value.parentMobileNo;
+		if (value.abcId) updatedData.abcId=value.abcId;
+		if (value.parentEmail) updatedData.parentEmail=value.parentEmail;
+
+        // Handle student photo upload using validateAndUploadFiles
+        if (req.files && Object.keys(req.files).length > 0) {
+            uploadedFiles = await validateAndUploadFiles(req.files, fileConfigs);
+
+            if (!uploadedFiles.studentPhoto) {
+                return res.status(500).json({ success: false, message: "Failed to upload photo. Please try again." });
+            }
+
+            updatedData.studentPhoto = {
+                url: uploadedFiles.studentPhoto.url,
+                publicId: uploadedFiles.studentPhoto.publicId
+            };
+        }
+
+        // Update student in DB
+        const updatedStudent = await Student.findByIdAndUpdate(
+            studentId,
+            { $set: updatedData },
+            { new: true, runValidators: true, select: "-password" }
+        );
+
+        dbSaved = true;
+
+        // Delete old photo if a new one was uploaded
+        if (uploadedFiles && uploadedFiles.studentPhoto && oldPublicId) {
+            try {
+                await cloudinary.uploader.destroy(oldPublicId);
+            } catch (err) {
+                console.error("Old photo deletion failed:", err.message);
+            }
+        }
+
+        return res.status(200).json({ success: true, message: "Student updated successfully", data: updatedStudent });
+
+    } catch (err) {
+        console.error("Error in updateStudent:", err);
+
+        // Rollback uploaded file if DB save fails
+        if (!dbSaved && uploadedFiles) {
+            const publicIds = Object.values(uploadedFiles).map(file => file.publicId);
+            await deleteMultipleFromCloudinary(publicIds);
+        }
+
+        return res.status(500).json({ success: false, message: "Internal Server Error" });
+    }
+};
+
+
+
+// DELETE STUDENT --student or admin
 const deleteStudent = async (req, res) => {
 	try {
-		const { studentId } = req.params;
-		const userId = req.user.id;
+		let studentId;
 
-		const student = await Student.findById(studentId);
+
+		// Verify requester
+		if (req.user.role === "admin") {
+
+			studentId=req.params.studentId;
+
+			if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
+				return res.status(400).json({ success:false, message: "Student ID required in valid format." });
+			}
+
+			
+		} else if (req.user.role === "student") {
+
+			studentId = req.user.id;
+	
+		}else{
+			return res.status(403).json({success:false, message: "Unauthorized role"});
+		}
+
+		const student = await Student.findByIdAndDelete(studentId);
 
 		if (!student) {
 			return res.status(404).json({ success: false, message: "Student not found" });
 		}
 
-		// Verify requester
-		if (req.user.role === "admin") {
-			const adminExists = await Admin.findById(userId);
-			if (!adminExists) {
-				return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-			}
-		} else if (req.user.role === "student") {
-
-			if(student._id.toString() !== userId.toString()){
-				return res.status(403).json({ success: false, message: "Resource does not belong to logged in student" });
-			}
-	
-		}else{
-			return res.status(400).json({success:false, message: "Bad Request"});
-		}
-
-		if(!student.studentPhoto.publicId){
-			return res.status(400).json({success:false, message: "To delete a student all details are necessary to be filled."});
-		}
-
-		// Delete student photo from Cloudinary if exists
-		if (student.studentPhoto.publicId) {
-			const delResult=await cloudinary.uploader.destroy(student.studentPhoto.publicId);
-
-			console.log("Cloudinary delete result:", delResult);
-
-			
-			if(delResult.result !== "ok" && delResult.result !== "not found"){
-				return res.status(500).json({ success: false, message: "Cannot delete student. Please try again later." });
+		// Delete student photo only if details deleted from cloudinary
+		if (student.studentPhoto && student.studentPhoto.publicId) {
+			try {
+				await deleteFromCloudinary(student.studentPhoto.publicId);
+			} catch (err) {
+				console.error("Cloudinary cleanup failed:", err);
 			}
 		}
 
-
-		const result=await Student.findByIdAndDelete(studentId);
-
-		if(!result){
-			return res.status(500).json({success:false, message:"Cannot delete student. Please try again later."})
-		}
 
 		// delete other documents in other schemas referencing to this student --only if studdent is first successfully deleted from Student.js
-		if(result){
-			await cascadeDeleteStudent(studentId);
-		}
+		   try {
+				await cascadeDeleteStudent(studentId);
+			} catch (err) {
+				console.error("Cascade failed:", err);
+			}
+		
 
-		res.status(200).json({ success: true, message: "Student deleted successfully" });
+		return res.status(200).json({ success: true, message: "Student deleted successfully" });
 	} catch (err) {
 		console.error("Error in deleteStudent:", err);
-		res.status(500).json({ success: false, message: "Internal Server Error" });
+		return res.status(500).json({ success: false, message: "Internal Server Error" });
 	}
 };
 
 
-// GET STUDENTS (with optional pagination)
+// GET STUDENTS (with optional pagination) --admin only
 const getStudents = async (req, res) => {
   try {
-    const adminId = req.user.id;
-
-    // Verify admin
-   	const adminExists = await Admin.exists({ _id: adminId});
-	if (!adminExists) {
-		return res.status(403).json({ success: false, message: "Unauthorized" });
-
-	}
 
     // Get query params
     const { year, search, page, limit } = req.query;
@@ -557,25 +702,27 @@ const getStudents = async (req, res) => {
 
     // Use defaults
 	const pageNum = value.page || 1;
-	const limitNum = value.limit || 10;
+	const limitNum = Math.min(value.limit || 10, 50);
+	const skip = (pageNum - 1) * limitNum;
 
-    const skip = (pageNum - 1) * limitNum;
+	const filter = {};
 
-    // Build filter
-    const filter = {};
-    if (year) {
-		filter.year = year.trim();
+	if (value.year) {
+		filter.year = value.year;
 	}
-    if (search) {
-		// sanitize to prevent regex injection
-		const safeSearch = search.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+
+	if (value.search) {
+		//regex safety
+		const safeSearch = value.search.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+
 		filter.$or = [
 			{ 'name.firstName': { $regex: safeSearch, $options: 'i' } },
 			{ 'name.middleName': { $regex: safeSearch, $options: 'i' } },
 			{ 'name.lastName': { $regex: safeSearch, $options: 'i' } },
 			{ 'name.motherName': { $regex: safeSearch, $options: 'i' } },
 		];
-    }
+	}
+
 
 
     // Get total count for filtered results
@@ -599,33 +746,28 @@ const getStudents = async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
 
-// ==================== GET SINGLE STUDENT BY ID (Admin) ====================
+// GET SINGLE STUDENT BY ID (Admin)
 const getSingleStudent = async (req, res) => {
 	try {
 
 		const { studentId } = req.params;
-		if (!studentId) {
-			return res.status(400).json({ success: false, message: "Student ID is required" });
+
+		//check studentId
+		if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
+			return res.status(400).json({ success:false, message: "Student ID required in valid format." });
 		}
 
-		const adminId = req.user.id;
-
-		// Verify requester exists
-		if (req.user.role === "admin") {
-		const adminExists = await Admin.findById(adminId);
-		if (!adminExists) {
-			return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-		}
-		} else{
-			return res.status(400).json({ success: false, message: "Bad Request" });
+		// Verify role
+		if (req.user.role !== "admin") {
+			return res.status(403).json({ success: false, message: "Unauthorized access." });
 		}
 
-		const student = await Student.findById(studentId);
+		const student = await Student.findById(studentId).select("-password -__v");
 		if (!student) {
 			return res.status(404).json({ success: false, message: "Student not found" });
 		}
@@ -647,7 +789,7 @@ const getStudentById= async (req,res)=>{
 			return res.status(400).json({ success: false, message: "Student ID is required, Please Login first" });
 		}
 
-		const student = await Student.findById(studentId);
+		const student = await Student.findById(studentId).select("-password -__v");
 		if (!student) {
 			return res.status(404).json({ success: false, message: "Student not found" });
 		}

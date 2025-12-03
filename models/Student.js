@@ -9,11 +9,11 @@ const studentSchema = new mongoose.Schema({
         motherName : { type : String , } ,
     },
 
-    PRN: { type: String, } , 
-    studentID: { type: String, unique: true} ,
+    PRN: { type: String, unique: true}, 
+    studentID: { type: String, unique: true},
 
-    email: { type: String, unique: true , },
-    password: { type: String,  },
+    email: { type: String, unique: true, },
+    password: { type: String, },
 
     branch: {
         type: String,
@@ -61,6 +61,10 @@ const studentSchema = new mongoose.Schema({
 
     mobileNo : { type: String, } , 
     parentMobileNo : { type: String, } ,
+
+    abcId : {type: String},
+    parentEmail: {type: String},
+
 
 
 }, 
