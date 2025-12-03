@@ -19,6 +19,12 @@ const cascadeDeleteStudent = require("../helpers/cascadeDeleteStudent");
 
 const { validateAndUploadFiles } = require("../helpers/ValidateAndUploadFiles");
 
+const sgMail = require('@sendgrid/mail');
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+
+const ExcelJS = require("exceljs"); // replaced xlsx
+
 // Configure your email transporter (example with Gmail)
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -38,156 +44,174 @@ const fileConfigs =[
 	{
 		fieldName: "studentPhoto",
 		allowedTypes: ["image/jpeg", "image/png", "image/jpg"],
-		maxSize: 5 * 1024 * 1024,
+		maxSize: 500 * 1024, // 500KB
 		friendlyName: "Student Photo"
 	},
 ];
 
-const importExcelDataWithPasswords = async (req, res) => {
-	try {
-		const adminId = req.user.id;
-
-		// Verify admin exists
-		const adminExists = await Admin.findById(adminId);
-		if (!adminExists) {
-		return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-		}
-
-		if (!req.file) {
-		return res.status(400).json({ success: false, message: "No file uploaded" });
-		}
-
-		// Read Excel file
-		const workbook = xlsx.readFile(req.file.path);
-		const sheetName = workbook.SheetNames[0];
-		const sheet = workbook.Sheets[sheetName];
-
-		// Convert Excel sheet to JSON
-		const rawData = xlsx.utils.sheet_to_json(sheet);
-
-		if (rawData.length === 0) {
-		return res.status(400).json({ success: false, message: "Excel file is empty" });
-		}
-
-		// Extract studentID & email
-		const filteredData = rawData
-		.map((row) => ({
-			studentID: row.studentID || row.StudentID || row["Student ID"] || "",
-			email: row.email || row.Email || row["Email ID"] || "",
-		}))
-		.filter((item) => item.studentID && item.email);
-
-		if (filteredData.length === 0) {
-		return res.status(400).json({
-			success: false,
-			message: "No valid studentID or email fields found in Excel file",
-		});
-		}
-
-		// For each student: generate, hash, save, and email
-		let successCount = 0;
-		let failedStudents = [];
-
-		for (const data of filteredData) {
-			try {
-				const randomPassword = generateRandomPassword(14);
-				const hashedPassword = await bcrypt.hash(randomPassword, 10);
-
-				// Validate current student object
-				const { error, value } = importExcelSchema.validate(data, { abortEarly: false });
-				if (error) {
-					const validationErrors = error.details.map(err => ({
-						field: err.path[0],
-						message: err.message
-					}));
-					
-					failedStudents.push({
-						studentID: data.studentID,
-						email: data.email,
-						error: validationErrors
-					});
-					continue; // Skip this student, continue with next
-				}
-
-				const newStudent = new Student({
-					studentID: data.studentID.trim(),
-					email: data.email.trim(),
-					password: hashedPassword,
-				});
-
-				const savedStudent = await newStudent.save();
-
-				// Only send email if saved successfully
-				const mailOptions = {
-				from: process.env.emailUser,
-				to: data.email,
-				subject: "Your Account Password",
-				text: `Hello ${data.studentID},\n\nYour new password is: ${randomPassword}\n`,
-				};
-
-				await transporter.sendMail(mailOptions);
-				successCount++;
-			} catch (err) {
-				console.error(`❌ Failed for ${data.studentID}:`, err.message);
-				failedStudents.push({
-				studentID: data.studentID,
-				email: data.email,
-				error: err.message,
-				});
-			}
-		}
-
-		// Delete uploaded file
-		fs.unlinkSync(req.file.path);
-
-		res.status(200).json({
-		success: true,
-		message: `Process completed. ${successCount} students added and emailed successfully.`,
-		failed: failedStudents,
-		});
-	} catch (error) {
-		console.error("Error importing Excel:", error);
-		res.status(500).json({
-		success: false,
-		message: "Error importing Excel data",
-		});
-	}
+// Helper to safely get cell value as string
+const getCellValue = (cell) => {
+  if (!cell) return "";
+  if (typeof cell === "string") return cell.trim();
+  if (typeof cell === "number") return cell.toString();
+  if (cell?.text) return cell.text.trim();       // rich text
+  if (cell?.hyperlink) return cell.hyperlink;    // hyperlink type
+  return "";
 };
 
 
-
-// Controller: Export all students to Excel
-const exportAllStudentsToExcel = async (req, res) => {
+const importExcelDataWithPasswords = async (req, res) => {
   try {
+    const adminId = req.user.id;
 
-	const adminId=req.user.id;
+    const adminExists = await Admin.findById(adminId);
+    if (!adminExists) {
+      return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
+    }
 
-	if(req.user.role !== "admin"){
-		return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-	}
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No file uploaded" });
+    }
 
-	// Verify admin exists
-	const adminExists = await Admin.findById(adminId);
-	if (!adminExists) {
-		return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-	}
+    // --- Read Excel from buffer using ExcelJS ---
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
 
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      return res.status(400).json({ success: false, message: "Excel file is empty" });
+    }
 
+    // --- Read headers dynamically ---
+    const headerRow = worksheet.getRow(1);
+    const headers = headerRow.values.slice(1).map(h => h?.toString().trim().toLowerCase());
 
-    // 1. Fetch all students from DB
-    const students = await Student.find();
+    const studentIDColIndex = headers.findIndex(h => h.includes("studentid")) + 1;
+    const emailColIndex = headers.findIndex(h => h.includes("email")) + 1;
 
-    if (!students || students.length === 0) {
-      return res.status(404).json({
+    if (studentIDColIndex === 0 || emailColIndex === 0) {
+      return res.status(400).json({ success: false, message: "Excel must contain 'studentID' and 'email' columns" });
+    }
+
+    // --- Convert worksheet to JSON dynamically ---
+    const rawData = [];
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return; // skip header
+      rawData.push({
+        studentID: getCellValue(row.getCell(studentIDColIndex)),
+        email: getCellValue(row.getCell(emailColIndex)),
+      });
+    });
+
+    if (rawData.length === 0) {
+      return res.status(400).json({ success: false, message: "Excel file is empty" });
+    }
+
+    const filteredData = rawData.filter(item => item.studentID && item.email);
+
+    if (filteredData.length === 0) {
+      return res.status(400).json({
         success: false,
-        message: "No students found in the database.",
+        message: "No valid studentID or email fields found",
       });
     }
 
-    // 2. Format data for Excel
+    if (filteredData.length > 100) {
+      return res.status(400).json({ success: false, message: "Excel file can contain max 100 students due to email limits." });
+    }
+
+    let successCount = 0;
+    let failedStudents = [];
+
+    for (const data of filteredData) {
+      try {
+        const { error } = importExcelSchema.validate(data, { abortEarly: false });
+        if (error) {
+          failedStudents.push({
+            studentID: data.studentID,
+            email: data.email,
+            error: error.details.map(e => ({ field: e.path[0], message: e.message })),
+          });
+          continue;
+        }
+
+        const randomPassword = generateRandomPassword(14);
+        const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+        const newStudent = new Student({
+          studentID: data.studentID,
+          email: data.email,
+          password: hashedPassword,
+        });
+        await newStudent.save();
+
+        await sgMail.send({
+          to: data.email,
+          from: process.env.SENDGRID_VERIFIED_SENDER,
+          subject: "Your Account Password",
+          text: `Hello ${data.studentID},\n\nYour password is: ${randomPassword}\n`,
+        });
+
+        successCount++;
+      } catch (err) {
+        console.error(`❌ Failed for ${data.studentID}:`, err.message);
+        failedStudents.push({ studentID: data.studentID, email: data.email, error: err.message });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Process completed. ${successCount} students added and emailed successfully.`,
+      failed: failedStudents,
+    });
+  } catch (error) {
+    console.error("Error importing Excel:", error);
+    return res.status(500).json({ success: false, message: "Error importing Excel data" });
+  }
+};
+
+// --- exportAllStudentsToExcel ---
+const exportAllStudentsToExcel = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
+    }
+
+    const adminExists = await Admin.findById(adminId);
+    if (!adminExists) {
+      return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
+    }
+
+    const students = await Student.find();
+    if (!students || students.length === 0) {
+      return res.status(404).json({ success: false, message: "No students found in the database." });
+    }
+
+    // --- Create workbook and sheet using ExcelJS ---
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Students");
+
+    worksheet.columns = [
+      { header: "StudentID", key: "StudentID", width: 20 },
+      { header: "Name", key: "Name", width: 30 },
+      { header: "Email", key: "Email", width: 30 },
+      { header: "Branch", key: "Branch", width: 15 },
+      { header: "Year", key: "Year", width: 10 },
+      { header: "DOB", key: "DOB", width: 15 },
+      { header: "BloodGroup", key: "BloodGroup", width: 10 },
+      { header: "MobileNo", key: "MobileNo", width: 15 },
+      { header: "CurrentStreet", key: "CurrentStreet", width: 20 },
+      { header: "CurrentCity", key: "CurrentCity", width: 15 },
+      { header: "CurrentPincode", key: "CurrentPincode", width: 10 },
+      { header: "StudentPhotoURL", key: "StudentPhotoURL", width: 50 },
+    ];
+
+    // Add rows
     const formattedData = students.map((student) => ({
       StudentID: student.studentID || "",
-	  Name: student.name?.lastName + student.name?.firstName + student.name?.middleName || "",
+      Name: student.name?.lastName + student.name?.firstName + student.name?.middleName || "",
       Email: student.email || "",
       Branch: student.branch + "",
       Year: student.year || "",
@@ -197,35 +221,23 @@ const exportAllStudentsToExcel = async (req, res) => {
       CurrentStreet: student.currentAddress?.street || "",
       CurrentCity: student.currentAddress?.city || "",
       CurrentPincode: student.currentAddress?.pincode || "",
-	  StudentPhotoURL: student.studentPhoto?.url || "",
-
+      StudentPhotoURL: student.studentPhoto?.url || "",
     }));
 
-    // 3. Create a new workbook and sheet
-    const workbook = xlsx.utils.book_new();
-    const worksheet = xlsx.utils.json_to_sheet(formattedData);
+    worksheet.addRows(formattedData);
 
-    xlsx.utils.book_append_sheet(workbook, worksheet, "Students");
+    // Send as download directly
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=StudentsData.xlsx"
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
 
-    // 4. Save file temporarily to server
-    const exportDir = path.join(__dirname, "../exports");
-    if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir);
-
-    const filePath = path.join(exportDir, `Students_${Date.now()}.xlsx`);
-    xlsx.writeFile(workbook, filePath);
-
-    // 5. Send file to user for download
-    return res.download(filePath, "StudentsData.xlsx", (err) => {
-      if (err) {
-        console.error("Error while downloading file:", err);
-        res.status(500).json({ success: false, message: "File download failed" });
-      }
-
-      // 6. Delete file after sending (to avoid clutter)
-      fs.unlink(filePath, (delErr) => {
-        if (delErr) console.error("Error deleting temp file:", delErr);
-      });
-    });
+    await workbook.xlsx.write(res);
+    res.end();
   } catch (error) {
     console.error("Error exporting students to Excel:", error);
     return res.status(500).json({
@@ -234,6 +246,7 @@ const exportAllStudentsToExcel = async (req, res) => {
     });
   }
 };
+
 
 
 // Add remaining Details from schema --for student or admin
