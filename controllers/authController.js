@@ -14,7 +14,8 @@ const JWT_SECRET = process.env.JWT_SECRET || "secret_key";
 const cookieOptions = {
   httpOnly: true,
   maxAge: 1000 * 60 * 60 * 24, // 1 day
-  sameSite: 'lax',
+  secure: true,
+  sameSite: "none",
 };
 
 // ---------------- SIGNUP ----------------
@@ -136,7 +137,13 @@ exports.login = async (req, res) => {
         );
 
         res.cookie('token', token, cookieOptions);
-        return res.status(200).json({ success:true, message: 'Login successful', data:studentObj });
+        return res.status(200).json({ success:true, message: 'Login successful', token: token, // ← ADDED THIS
+      user: {
+        id: student._id,
+        studentID: student.studentID,
+        email: student.email,
+        role: "student",
+      },});
     } catch (error) {
         console.error("Login Error:", error);
         return res.status(500).json({ success: false, message: "Internal Server Error. Please try again later." });
@@ -165,7 +172,12 @@ exports.adminLogin = async (req, res) => {
         );
 
         res.cookie('token', token, cookieOptions);
-        return res.status(200).json({ success:true, message: 'Admin login successful', data:adminObj });
+        return res.status(200).json({ success:true, message: 'Admin login successful', token: token, // ← ADDED THIS
+      user: {
+        id: admin._id,
+        email: admin.email,
+        role: "admin",
+      }, });
     } catch (error) {
         console.error("Admin Login Error:", error);
         return res.status(500).json({ success: false, message: "Internal Server Error. Please try again later." });
@@ -175,7 +187,7 @@ exports.adminLogin = async (req, res) => {
 // ---------------- LOGOUT ----------------
 exports.logout = (req, res) => {
     try {
-        res.clearCookie('token', { httpOnly: true, sameSite: 'lax' });
+        res.clearCookie('token',{ httpOnly: true, sameSite: "none", secure: true });
         return res.status(200).json({ message: 'Logout successful' });
     } catch (err) {
         console.error("Logout Error:", err);
