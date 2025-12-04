@@ -60,15 +60,10 @@ const getCellValue = (cell) => {
 };
 
 
-const importExcelDataWithPasswords = async (req, res) => {
+const importExcelDataWithPasswords100DBCalls = async (req, res) => {
   try {
-    const adminId = req.user.id;
 
-    const adminExists = await Admin.findById(adminId);
-    if (!adminExists) {
-      return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-    }
-
+    //create abetter check for excel file
     if (!req.file) {
       return res.status(400).json({ success: false, message: "No file uploaded" });
     }
@@ -170,17 +165,179 @@ const importExcelDataWithPasswords = async (req, res) => {
   }
 };
 
+const importExcelDataWithPasswords = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded"
+      });
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      return res.status(400).json({
+        success: false,
+        message: "Excel file is empty"
+      });
+    }
+
+    const headerRow = worksheet.getRow(1);
+    const headers = headerRow.values
+      .slice(1)
+      .map(h => h?.toString().trim().toLowerCase());
+
+    const studentIDColIndex = headers.findIndex(h => h.includes("studentid")) + 1;
+    const emailColIndex = headers.findIndex(h => h.includes("email")) + 1;
+
+    if (studentIDColIndex === 0 || emailColIndex === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Excel must contain 'studentID' and 'email' columns"
+      });
+    }
+
+    const rawData = [];
+
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+
+      rawData.push({
+        studentID: getCellValue(row.getCell(studentIDColIndex)),
+        email: getCellValue(row.getCell(emailColIndex))
+      });
+    });
+
+    const filteredData = rawData.filter(i => i.studentID && i.email);
+
+    if (filteredData.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid studentID or email fields found"
+      });
+    }
+
+    if (filteredData.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Excel file can contain max 100 students due to email limits."
+      });
+    }
+
+    const studentsToSave = [];
+    const emailJobs = [];
+    const failedStudents = [];
+
+    for (const data of filteredData) {
+      const { error } = importExcelSchema.validate(data, { abortEarly: false });
+
+      if (error) {
+        failedStudents.push({
+          studentID: data.studentID,
+          email: data.email,
+          error: error.details.map(e => ({
+            field: e.path[0],
+            message: e.message
+          }))
+        });
+        continue;
+      }
+
+      const randomPassword = generateRandomPassword(14);
+      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+      studentsToSave.push({
+        studentID: data.studentID,
+        email: data.email,
+        password: hashedPassword
+      });
+
+      emailJobs.push({
+        studentID: data.studentID,
+        email: data.email,
+        password: randomPassword
+      });
+    }
+
+    // -------- Save all students in one DB call --------
+    let insertedStudents = [];
+
+    if (studentsToSave.length > 0) {
+      try {
+        insertedStudents = await Student.insertMany(studentsToSave, { ordered: false });
+      } catch (err) {
+        console.error("Insert many error:", err.message);
+      }
+    }
+
+    // -------- Send email in batches: 5 emails, 3s delay --------
+    const BATCH_SIZE = 5;
+    const DELAY = 3000;
+
+    const sendWithDelay = (ms) => new Promise(res => setTimeout(res, ms));
+
+    for (let i = 0; i < emailJobs.length; i += BATCH_SIZE) {
+      const batch = emailJobs.slice(i, i + BATCH_SIZE);
+
+      await Promise.all(
+        batch.map(job =>
+          sgMail.send({
+            to: job.email,
+            from: process.env.SENDGRID_VERIFIED_SENDER,
+            subject: "Your Account Password",
+            text: `Hello ${job.studentID},
+
+Your account has been created.
+
+Email: ${job.email}
+Password: ${job.password}`
+          }).catch(err => {
+            console.error(`❌ Email failed for ${job.studentID}:`, err.message);
+
+            failedStudents.push({
+              studentID: job.studentID,
+              email: job.email,
+              error: "Email failed to send"
+            });
+          })
+        )
+      );
+
+      if (i + BATCH_SIZE < emailJobs.length) {
+        await sendWithDelay(DELAY);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Import completed`,
+      summary: {
+        received: filteredData.length,
+        inserted: insertedStudents.length,
+        emailed: emailJobs.length - failedStudents.length,
+        failed: failedStudents.length
+      },
+      failedStudents
+    });
+
+  } catch (error) {
+    console.error("Import error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error importing Excel data"
+    });
+  }
+};
+
+
 // --- exportAllStudentsToExcel ---
 const exportAllStudentsToExcel = async (req, res) => {
   try {
-    const adminId = req.user.id;
 
     if (req.user.role !== "admin") {
-      return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
-    }
-
-    const adminExists = await Admin.findById(adminId);
-    if (!adminExists) {
       return res.status(403).json({ success: false, message: "Admin not found or unauthorized" });
     }
 
@@ -194,35 +351,99 @@ const exportAllStudentsToExcel = async (req, res) => {
     const worksheet = workbook.addWorksheet("Students");
 
     worksheet.columns = [
-      { header: "StudentID", key: "StudentID", width: 20 },
-      { header: "Name", key: "Name", width: 30 },
-      { header: "Email", key: "Email", width: 30 },
-      { header: "Branch", key: "Branch", width: 15 },
-      { header: "Year", key: "Year", width: 10 },
-      { header: "DOB", key: "DOB", width: 15 },
-      { header: "BloodGroup", key: "BloodGroup", width: 10 },
-      { header: "MobileNo", key: "MobileNo", width: 15 },
-      { header: "CurrentStreet", key: "CurrentStreet", width: 20 },
-      { header: "CurrentCity", key: "CurrentCity", width: 15 },
-      { header: "CurrentPincode", key: "CurrentPincode", width: 10 },
-      { header: "StudentPhotoURL", key: "StudentPhotoURL", width: 50 },
-    ];
+  { header: "StudentID", key: "StudentID", width: 20 },
+  { header: "PRN", key: "PRN", width: 20 },
+
+  { header: "First Name", key: "FirstName", width: 20 },
+  { header: "Middle Name", key: "MiddleName", width: 20 },
+  { header: "Last Name", key: "LastName", width: 20 },
+  { header: "Mother Name", key: "MotherName", width: 20 },
+
+  { header: "Email", key: "Email", width: 30 },
+  { header: "Parent Email", key: "ParentEmail", width: 30 },
+
+  { header: "Mobile No", key: "MobileNo", width: 15 },
+  { header: "Parent Mobile No", key: "ParentMobileNo", width: 15 },
+
+  { header: "ABC ID", key: "ABCID", width: 25 },
+
+  { header: "Branch", key: "Branch", width: 20 },
+  { header: "Year", key: "Year", width: 10 },
+
+  { header: "DOB", key: "DOB", width: 15 },
+  { header: "Blood Group", key: "BloodGroup", width: 10 },
+  { header: "Category", key: "Category", width: 15 },
+
+  // Current Address
+  { header: "Current Street", key: "CurrentStreet", width: 30 },
+  { header: "Current City", key: "CurrentCity", width: 20 },
+  { header: "Current Pincode", key: "CurrentPincode", width: 15 },
+
+  // Native Address
+  { header: "Native Street", key: "NativeStreet", width: 30 },
+  { header: "Native City", key: "NativeCity", width: 20 },
+  { header: "Native Pincode", key: "NativePincode", width: 15 },
+
+  // Photo
+  { header: "Student Photo URL", key: "StudentPhotoURL", width: 50 },
+  { header: "Student Photo Public ID", key: "StudentPhotoPublicId", width: 50 },
+
+  // Timestamps
+  { header: "Created At", key: "CreatedAt", width: 30 },
+  { header: "Updated At", key: "UpdatedAt", width: 30 },
+];
+
 
     // Add rows
     const formattedData = students.map((student) => ({
-      StudentID: student.studentID || "",
-      Name: student.name?.lastName + student.name?.firstName + student.name?.middleName || "",
-      Email: student.email || "",
-      Branch: student.branch + "",
-      Year: student.year || "",
-      DOB: student.dob || "",
-      BloodGroup: student.bloodGroup || "",
-      MobileNo: student.mobileNo || "",
-      CurrentStreet: student.currentAddress?.street || "",
-      CurrentCity: student.currentAddress?.city || "",
-      CurrentPincode: student.currentAddress?.pincode || "",
-      StudentPhotoURL: student.studentPhoto?.url || "",
-    }));
+  StudentID: student.studentID || "",
+  PRN: student.PRN || "",
+
+  FirstName: student.name?.firstName || "",
+  MiddleName: student.name?.middleName || "",
+  LastName: student.name?.lastName || "",
+  MotherName: student.name?.motherName || "",
+
+  Email: student.email || "",
+  ParentEmail: student.parentEmail || "",
+
+  MobileNo: student.mobileNo || "",
+  ParentMobileNo: student.parentMobileNo || "",
+
+  ABCID: student.abcId || "",
+
+  Branch: student.branch || "",
+  Year: student.year || "",
+
+  DOB: student.dob
+    ? new Date(student.dob).toLocaleDateString("en-GB")
+    : "",
+
+  BloodGroup: student.bloodGroup || "",
+  Category: student.category || "",
+
+  // Current Address
+  CurrentStreet: student.currentAddress?.street || "",
+  CurrentCity: student.currentAddress?.city || "",
+  CurrentPincode: student.currentAddress?.pincode || "",
+
+  // Native Address
+  NativeStreet: student.nativeAddress?.street || "",
+  NativeCity: student.nativeAddress?.city || "",
+  NativePincode: student.nativeAddress?.nativePincode || "",
+
+  // Photo
+  StudentPhotoURL: student.studentPhoto?.url || "",
+
+  // Timestamps
+  CreatedAt: student.createdAt
+    ? new Date(student.createdAt).toLocaleString()
+    : "",
+  UpdatedAt: student.updatedAt
+    ? new Date(student.updatedAt).toLocaleString()
+    : "",
+}));
+
 
     worksheet.addRows(formattedData);
 
