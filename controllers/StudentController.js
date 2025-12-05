@@ -19,6 +19,10 @@ const cascadeDeleteStudent = require("../helpers/cascadeDeleteStudent");
 
 const { validateAndUploadFiles } = require("../helpers/ValidateAndUploadFiles");
 
+const mongoose = require("mongoose");
+const { deleteMultipleFromCloudinary } = require("../helpers/DeleteMultipleFromCloudinary");
+
+
 const sgMail = require('@sendgrid/mail');
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
@@ -282,7 +286,6 @@ const exportAllStudentsToExcel = async (req, res) => {
 
   // Photo
   { header: "Student Photo URL", key: "StudentPhotoURL", width: 50 },
-  { header: "Student Photo Public ID", key: "StudentPhotoPublicId", width: 50 },
 
   // Timestamps
   { header: "Created At", key: "CreatedAt", width: 30 },
